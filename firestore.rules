@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isParticipant(userIds) {
+      return isSignedIn() && (request.auth.uid in userIds);
+    }
+    
+    // Check if user is an admin 
+    // Requires an 'admins' collection where document ID matches the Admin User UID
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
+    // Basic PII Check (Best effort regex-like patterns)
+    // Firestore rules don't support full Regex, so we check for common indicators
+    // This is NOT perfect, client-side validation is the primary UX barrier.
+    function hasPII(text) {
+       // Check for '@' symbol as proxy for email
+       return text.matches('.*@.*'); 
+       // Note: Phone detection is too complex for robust Rules implementation without Regex
+    }
+
+    // --- CHATS COLLECTION ---
+    match /chats/{chatId} {
+      // Read: Participants or Admins
+      allow read: if isParticipant(resource.data.participants) || isAdmin();
+      
+      // Create: user must include themselves in participants
+      allow create: if isSignedIn() 
+                    && request.resource.data.participants.hasAll([request.auth.uid])
+                    && request.resource.data.keys().hasAll(['participants', 'createdAt', 'updatedAt']);
+
+      // Update: Participants can update (e.g., lastMessage)
+      allow update: if isParticipant(resource.data.participants);
+
+      // --- MESSAGES SUBCOLLECTION ---
+      match /messages/{messageId} {
+        allow read: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants) || isAdmin();
+        
+        allow create: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.resource.data.text.size() < 2000
+                      // Optional: Enforce PII check on server side too
+                      // && !hasPII(request.resource.data.text) 
+                      ;
+      }
+    }
+    
+    // --- USER APPLICATIONS (For existing Admin Panel) ---
+    match /user_applications/{appId} {
+        // Only admins can read/write full applications
+        allow read, write: if isAdmin();
+        // Users can create their own application (if we had a user-side flow, mostly open for now or restricted)
+        allow create: if true; 
+    }
+    
+    // --- NOTIFICATIONS ---
+    match /notifications/{notificationId} {
+      // Allow users to read their own notifications
+      allow read: if isSignedIn() && (
+        resource.data.recipientId == request.auth.uid || 
+        resource.data.recipientId == 'admin' ||
+        resource.data.recipientId == 'all'
+      );
+      // allow read: if isAdmin(); // Covered by 'or recipientId == admin' if admin listens to 'admin' channel
+      
+      // Allow anyone to create a notification (needed for signups to notify admin)
+      // In a stricter app, validate the structure or use Cloud Functions
+      allow create: if true;
+    }
+    
+    // --- JOB REQUESTS ---
+    match /job_requests/{requestId} {
+      // Read: 
+      // 1. Owner (Client)
+      // 2. Assigned Provider
+      // 3. Pending requests (Marketplace - open to all auth users)
+      // 4. Admins
+      allow read: if isSignedIn() && (
+        resource.data.clientId == request.auth.uid || 
+        resource.data.providerId == request.auth.uid || 
+        resource.data.status == 'pending' ||
+        (resource.data.invitedProviderIds is list && request.auth.uid in resource.data.invitedProviderIds) ||
+        isAdmin()
+      );
+
+      // Create: user must match clientId
+      allow create: if isSignedIn() && request.resource.data.clientId == request.auth.uid;
+
+      // Update: Participants or Admin
+      allow update: if isSignedIn() && (
+        resource.data.clientId == request.auth.uid || 
+        resource.data.providerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // --- MESSAGES SUBCOLLECTION (For UnifiedChat) ---
+      match /messages/{messageId} {
+         allow read, create: if isSignedIn() && (
+           get(/databases/$(database)/documents/job_requests/$(requestId)).data.clientId == request.auth.uid ||
+           get(/databases/$(database)/documents/job_requests/$(requestId)).data.providerId == request.auth.uid ||
+           isAdmin()
+         );
+      }
+    }
+
+    // --- USERS ---
+    match /users/{userId} {
+      // Users can read/write their own data
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if isAdmin();
+      
+      // Allow anyone to READ service provider profiles (needed for "Select Provider" list)
+
+      allow read: if isSignedIn() && resource.data.role == 'service_provider';
+
+      // Allow access to subcollections (e.g. documents)
+      match /documents/{docId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // --- ADMINS COLLECTION ---
+    match /admins/{adminId} {
+        allow read: if isSignedIn() && request.auth.uid == adminId;
+        allow write: if false; // Only manageable via Console
+    }
+  }
+}
