@@ -40,10 +40,18 @@ const Hero = () => {
             <Container className="relative z-10 w-full">
                 <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center py-8 lg:py-0">
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-1000 text-center lg:text-left">
-                        {/* Trusted Badge */}
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm font-medium">
-                            <ShieldCheck className="w-4 h-4 text-primary" />
-                            <span>Verified & Secure Platform</span>
+                        {/* Badges */}
+                        <div className="flex flex-wrap items-center gap-2 justify-center lg:justify-start">
+                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm font-medium">
+                                <ShieldCheck className="w-4 h-4 text-primary" />
+                                <span>Verified & Secure Platform</span>
+                            </div>
+                            <Link
+                                href="/download"
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-primary/20 hover:bg-primary/30 border border-primary/40 text-sky-300 text-xs font-semibold backdrop-blur-sm transition-all hover:scale-105"
+                            >
+                                <span>📱 Download App (APK)</span>
+                            </Link>
                         </div>
 
                         <div className="space-y-4">

@@ -2,6 +2,7 @@ import Hero from "@/components/home/Hero";
 import TrustIndicators from "@/components/home/TrustIndicators";
 import ServicesOverview from "@/components/home/ServicesOverview";
 import HowItWorksPreview from "@/components/home/HowItWorksPreview";
+import AppDownloadSection from "@/components/home/AppDownloadSection";
 import SafetySection from "@/components/home/SafetySection";
 import FinalCTA from "@/components/home/FinalCTA";
 
@@ -12,8 +13,10 @@ export default function Home() {
       <TrustIndicators />
       <ServicesOverview />
       <HowItWorksPreview />
+      <AppDownloadSection />
       <SafetySection />
       <FinalCTA />
     </main>
   );
 }
+

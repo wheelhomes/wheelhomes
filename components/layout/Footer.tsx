@@ -25,6 +25,7 @@ export default function Footer() {
                     <div>
                         <h3 className="text-lg font-bold mb-6 font-heading text-white">Platform</h3>
                         <ul className="space-y-3 text-sm text-gray-400">
+                            <li><Link href="/download" className="text-sky-400 hover:text-white font-semibold transition-colors flex items-center gap-1.5"><span>📱 Download Mobile App</span></Link></li>
                             <li><Link href="/real-estate" className="hover:text-primary transition-colors">Residential Properties</Link></li>
                             <li><Link href="/real-estate" className="hover:text-primary transition-colors">Commercial Leases</Link></li>
                             <li><Link href="/services" className="hover:text-primary transition-colors">Book a Technician</Link></li>
