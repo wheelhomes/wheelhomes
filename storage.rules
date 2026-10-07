@@ -37,6 +37,25 @@ service firebase.storage {
                    && validSize();
     }
 
+    // --- SERVICE REQUEST EVIDENCE & PHOTOS ---
+    // Path: service_requests/{requestId}/{fileName}
+    match /service_requests/{requestId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() 
+                   && validImageOrPdf()
+                   && validSize();
+    }
+
+    // --- PROPERTY PORTFOLIO PHOTOS ---
+    // Path: properties/{propertyId}/{fileName}
+    match /properties/{propertyId}/{allPaths=**} {
+      // Public read so prospective clients can view property images
+      allow read: if true;
+      allow write: if isSignedIn() 
+                   && validImageOrPdf()
+                   && validSize();
+    }
+
     // --- JOB EVIDENCE ---
     match /job_evidence/{allPaths=**} {
       allow read, write: if isSignedIn(); 

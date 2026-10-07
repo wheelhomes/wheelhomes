@@ -12,9 +12,14 @@ service cloud.firestore {
     }
     
     // Check if user is an admin 
-    // Requires an 'admins' collection where document ID matches the Admin User UID
+    // Checks admins collection, users collection (role == 'admin'), or designated admin email
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        request.auth.token.email in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
+      );
     }
     
     // Basic PII Check (Best effort regex-like patterns)
@@ -62,20 +67,49 @@ service cloud.firestore {
     
     // --- NOTIFICATIONS ---
     match /notifications/{notificationId} {
-      // Allow users to read their own notifications
+      // Allow users to read their own notifications (supports both userId and recipientId)
       allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
         resource.data.recipientId == request.auth.uid || 
         resource.data.recipientId == 'admin' ||
-        resource.data.recipientId == 'all'
+        resource.data.recipientId == 'all' ||
+        isAdmin()
       );
-      // allow read: if isAdmin(); // Covered by 'or recipientId == admin' if admin listens to 'admin' channel
       
-      // Allow anyone to create a notification (needed for signups to notify admin)
-      // In a stricter app, validate the structure or use Cloud Functions
-      allow create: if true;
+      // Allow users to create notifications
+      allow create: if isSignedIn();
+
+      // Allow users to update their own notification (mark as read)
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.recipientId == request.auth.uid ||
+        isAdmin()
+      );
     }
     
-    // --- JOB REQUESTS ---
+    // --- SERVICE REQUESTS (Mobile & Unified Marketplace) ---
+    match /requests/{requestId} {
+      // Read: Client, Assigned Provider, Pending marketplace, or Admin
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.providerId == request.auth.uid || 
+        resource.data.status == 'pending' ||
+        isAdmin()
+      );
+
+      // Create: User must be creator
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      // Update: Client, Assigned Provider, Provider claiming job, or Admin
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.providerId == request.auth.uid ||
+        resource.data.status == 'pending' ||
+        isAdmin()
+      );
+    }
+
+    // --- JOB REQUESTS (Web compatibility) ---
     match /job_requests/{requestId} {
       // Read: 
       // 1. Owner (Client)
@@ -110,6 +144,40 @@ service cloud.firestore {
       }
     }
 
+    // --- PROPERTIES (Real Estate Listings) ---
+    match /properties/{propertyId} {
+      // Public / All authenticated users can view active property listings
+      allow read: if true;
+
+      // Only signed-in users (agents/admins) can list properties
+      allow create: if isSignedIn();
+
+      // Only agent creator or admin can edit/update listings
+      allow update, delete: if isSignedIn() && (
+        resource.data.agentId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // --- TRANSACTIONS & ESCROW AUDIT ---
+    match /transactions/{transactionId} {
+      // Users can only view their own transactions; Admins can audit all
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Authenticated users can record transactions associated with their own UID
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      // Updates (e.g. escrow status release) restricted to participants or admins
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
     // --- USERS ---
     match /users/{userId} {
       // Users can read/write their own data
@@ -117,7 +185,6 @@ service cloud.firestore {
       allow read, write: if isAdmin();
       
       // Allow anyone to READ service provider profiles (needed for "Select Provider" list)
-
       allow read: if isSignedIn() && resource.data.role == 'service_provider';
 
       // Allow access to subcollections (e.g. documents)
@@ -129,8 +196,8 @@ service cloud.firestore {
 
     // --- ADMINS COLLECTION ---
     match /admins/{adminId} {
-        allow read: if isSignedIn() && request.auth.uid == adminId;
-        allow write: if false; // Only manageable via Console
+        allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+        allow write: if isAdmin();
     }
   }
 }

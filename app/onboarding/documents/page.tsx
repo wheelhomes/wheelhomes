@@ -6,6 +6,7 @@ import { auth, db } from "../../../lib/firebase";
 import { doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
 import { Shield, Upload, FileText, Camera, CheckCircle, AlertCircle, X, ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { sendPendingReviewEmailAction } from "@/app/actions/email";
 
 interface DocState {
     file: File | null;
@@ -101,6 +102,12 @@ export default function DocumentVerificationPage() {
                 },
                 status: 'pending_review'
             });
+
+            // Dispatch pending review confirmation email to user
+            if (user.email) {
+                sendPendingReviewEmailAction(user.email, user.displayName || 'Service Provider')
+                    .catch(err => console.warn('[Onboarding Docs] Notice: Pending review email dispatch:', err));
+            }
 
             router.push("/dashboard/pending");
 

@@ -5,6 +5,7 @@ import { Shield, FileCheck, XCircle, Clock, CheckCircle, Upload, AlertCircle, Lo
 import { db } from "../../../../../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { sendPendingReviewEmailAction } from "@/app/actions/email";
 
 export default function VerificationSettingsPage() {
     const [isLoading, setIsLoading] = useState(true);
@@ -243,6 +244,10 @@ export default function VerificationSettingsPage() {
                             if (!user) return;
                             if (confirm("Submit documents for review?")) {
                                 await updateDoc(doc(db, "users", user.uid), { status: 'pending_review' });
+                                if (user.email) {
+                                    sendPendingReviewEmailAction(user.email, user.displayName || user.fullName || 'Service Provider')
+                                        .catch(err => console.warn('[Verification] Notice: Pending review email dispatch:', err));
+                                }
                                 window.location.reload();
                             }
                         }}

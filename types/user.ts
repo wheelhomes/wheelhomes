@@ -21,8 +21,8 @@ export interface UserProfile {
     phone: string;
     businessName?: string;
 
-    role: 'user' | 'service_provider' | 'agent' | 'admin' | 'pending_role_selection';
-    status: 'unverified' | 'pending_review' | 'approved' | 'rejected' | 'restricted' | 'verified';
+    role: 'user' | 'service_provider' | 'agent' | 'admin' | 'pending_role_selection' | string;
+    status: 'unverified' | 'pending_review' | 'pending' | 'approved' | 'rejected' | 'restricted' | 'verified' | string;
 
     // Personal Details (User Onboarding)
     gender?: string;

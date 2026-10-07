@@ -16,7 +16,9 @@ import {
     Server,
     Database,
     ShieldCheck,
-    MoreHorizontal
+    MoreHorizontal,
+    Building2,
+    CreditCard
 } from "lucide-react";
 import Link from "next/link";
 
@@ -49,7 +51,9 @@ export default function AdminDashboardOverview() {
         totalUsers: 0,
         activeProviders: 0,
         pendingProviders: 0,
-        revenue: 0 // Placeholder until payments implementation
+        totalProperties: 0,
+        revenue: 0,
+        escrowHeld: 0
     });
 
     // State for Activity Feed
@@ -65,17 +69,39 @@ export default function AdminDashboardOverview() {
             const activeProviders = users.filter((u: any) => u.role === 'service_provider' && u.status === 'approved').length;
 
             setStats(prev => ({ ...prev, totalUsers, activeProviders }));
-        });
+        }, (err) => console.warn("Dashboard users listener:", err.message));
 
         // 2. Fetch Pending Applications (Real-time)
-        // This was previously looking at 'users' which was wrong
         const appsQuery = query(collection(db, "user_applications"), where("status", "==", "pending"));
         const unsubscribeApps = onSnapshot(appsQuery, (snapshot) => {
             const pendingProviders = snapshot.size;
             setStats(prev => ({ ...prev, pendingProviders }));
-        });
+        }, (err) => console.warn("Dashboard apps listener:", err.message));
 
-        // 3. Fetch Notifications for Activity Feed
+        // 3. Fetch Properties Count (Real-time)
+        const propsQuery = query(collection(db, "properties"));
+        const unsubscribeProps = onSnapshot(propsQuery, (snapshot) => {
+            const totalProperties = snapshot.size;
+            setStats(prev => ({ ...prev, totalProperties }));
+        }, (err) => console.warn("Dashboard properties listener:", err.message));
+
+        // 4. Fetch Transactions for Real Revenue & Escrow (Real-time)
+        const txQuery = query(collection(db, "transactions"));
+        const unsubscribeTx = onSnapshot(txQuery, (snapshot) => {
+            let totalRev = 0;
+            let escrowHeld = 0;
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const amt = Number(data.amount || 0);
+                totalRev += amt;
+                if (data.status === 'escrow_held') {
+                    escrowHeld += amt;
+                }
+            });
+            setStats(prev => ({ ...prev, revenue: totalRev, escrowHeld }));
+        }, (err) => console.warn("Dashboard transactions listener:", err.message));
+
+        // 5. Fetch Notifications for Activity Feed
         const notificationsQuery = query(
             collection(db, "notifications"),
             where("recipientId", "==", "admin"),
@@ -92,14 +118,14 @@ export default function AdminDashboardOverview() {
                     user: "System",
                     role: 'admin',
                     time: timeAgo(data.createdAt),
-                    msg: data.title, // Use title as main message
+                    msg: data.title,
                     description: data.message,
                     rawTime: data.createdAt,
                     link: data.link
                 };
             });
             setActivities(alerts);
-        });
+        }, (err) => console.warn("Dashboard notifications listener:", err.message));
 
         // Live Pulse Effect
         const interval = setInterval(() => setIsLive(p => !p), 2000);
@@ -107,44 +133,50 @@ export default function AdminDashboardOverview() {
         return () => {
             unsubscribeUsers();
             unsubscribeApps();
+            unsubscribeProps();
+            unsubscribeTx();
             unsubscribeNotifs();
             clearInterval(interval);
         };
     }, []);
 
-    // Derived Stats with Trends (Simulated trends for MVP)
+    // Derived Stats
     const DISPLAY_STATS = [
         {
             label: "Total Users",
             value: stats.totalUsers.toLocaleString(),
-            change: "+12%",
+            change: "Live",
             trend: "up",
             icon: Users,
-            color: "text-gray-600"
+            color: "text-gray-600",
+            href: "/admin/users"
         },
         {
             label: "Active Providers",
             value: stats.activeProviders.toLocaleString(),
-            change: "+5%",
-            trend: "up",
+            change: stats.pendingProviders > 0 ? `${stats.pendingProviders} pending` : "Active",
+            trend: stats.pendingProviders > 0 ? "down" : "up",
             icon: Briefcase,
-            color: "text-orange-600"
+            color: "text-orange-600",
+            href: "/admin/approvals"
         },
         {
-            label: "Pending Reviews",
-            value: stats.pendingProviders.toLocaleString(),
-            change: "Action Req.",
-            trend: stats.pendingProviders > 0 ? "down" : "neutral",
-            icon: AlertCircle,
-            color: "text-red-600"
+            label: "Property Listings",
+            value: stats.totalProperties.toLocaleString(),
+            change: "Real Estate",
+            trend: "up",
+            icon: Building2,
+            color: "text-blue-600",
+            href: "/admin/properties"
         },
         {
-            label: "Total Revenue",
-            value: "₦0.00",
-            change: "0%",
-            trend: "neutral",
-            icon: DollarSign,
-            color: "text-green-600"
+            label: "Escrow Vault",
+            value: stats.escrowHeld > 0 ? `₦${stats.escrowHeld.toLocaleString()}` : `₦${stats.revenue.toLocaleString()}`,
+            change: stats.escrowHeld > 0 ? "Held Safe" : "Total Volume",
+            trend: "up",
+            icon: CreditCard,
+            color: "text-green-600",
+            href: "/admin/transactions"
         },
     ];
 
@@ -165,12 +197,16 @@ export default function AdminDashboardOverview() {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {DISPLAY_STATS.map((stat, i) => (
-                    <div key={i} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow cursor-default group">
+                    <Link
+                        key={i}
+                        href={stat.href}
+                        className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group block"
+                    >
                         <div className="flex justify-between items-start mb-4">
-                            <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
+                            <div className="p-2 bg-gray-50 rounded-xl group-hover:bg-orange-50 transition-colors">
                                 <stat.icon className={`w-5 h-5 ${stat.color}`} />
                             </div>
-                            <span className={`flex items-center text-xs font-bold ${stat.trend === 'up' ? 'text-green-600' : stat.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                            <span className={`flex items-center text-xs font-bold ${stat.trend === 'up' ? 'text-green-600' : stat.trend === 'down' ? 'text-amber-600' : 'text-gray-400'}`}>
                                 {stat.change}
                                 {stat.trend === 'up' && <ArrowUpRight className="w-3 h-3 ml-0.5" />}
                                 {stat.trend === 'down' && <AlertCircle className="w-3 h-3 ml-0.5" />}
@@ -180,7 +216,7 @@ export default function AdminDashboardOverview() {
                             <span className="text-gray-500 text-xs font-medium uppercase tracking-wider">{stat.label}</span>
                             <h3 className="text-2xl font-black text-gray-900 mt-1">{stat.value}</h3>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
 

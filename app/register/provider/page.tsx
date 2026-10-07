@@ -7,6 +7,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage";
 import { Briefcase, MapPin, BadgeCheck, Upload, ArrowRight, User } from "lucide-react";
 import { compressImageToBase64 } from "../../../lib/image-utils";
+import { sendPendingReviewEmailAction } from "@/app/actions/email";
 
 export default function RegisterProviderPage() {
     const router = useRouter();
@@ -102,6 +103,12 @@ export default function RegisterProviderPage() {
                 }
             });
 
+            // Dispatch pending review confirmation email to applicant
+            const candidateEmail = currentUser.email || user?.email;
+            if (candidateEmail) {
+                sendPendingReviewEmailAction(candidateEmail, user?.fullName || currentUser.displayName || 'Service Provider')
+                    .catch(err => console.warn('[Register Provider] Notice: Pending review email dispatch:', err));
+            }
 
             router.push("/dashboard/pending");
 

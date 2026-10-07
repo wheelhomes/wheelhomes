@@ -7,6 +7,7 @@ import { ref, getDownloadURL, uploadString } from "firebase/storage";
 import { compressImageToBase64 } from "../../../lib/image-utils";
 import { Shield, Upload, CheckCircle, AlertCircle, Clock, FileText, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { sendPendingReviewEmailAction } from "@/app/actions/email";
 
 interface ApplicationData {
     serviceCategory?: string;
@@ -98,10 +99,13 @@ export default function VerificationSettingsPage() {
                     ...appDataUpdates,
                     resubmittedAt: new Date().toISOString()
                 },
-                // Clear rejection fields logic could be here, but usually we keep history or overwrite.
-                // For simplified flow, we remove the rejection blocks by setting status back to pending.
-                // We kept old rejectionReason for history or clear it? Let's keep it until new review.
             });
+
+            // Dispatch pending review confirmation email
+            if (user.email) {
+                sendPendingReviewEmailAction(user.email, user.fullName || 'Service Provider')
+                    .catch(err => console.warn('[Settings Verification] Notice: Pending review email dispatch:', err));
+            }
 
             alert("Documents re-uploaded successfully! Your account is now under review.");
             window.location.reload(); // Reload to reflect status changes
