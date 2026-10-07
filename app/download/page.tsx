@@ -23,9 +23,9 @@ export default function DownloadPage() {
   const [activePlatform, setActivePlatform] = useState<"android" | "ios">("android");
   const [downloadStarted, setDownloadStarted] = useState(false);
 
-  // APK download URL (points to /api/download-apk which handles local file or cloud CDN)
+  // APK download URL (static file or cloud CDN override)
   const apkDownloadUrl =
-    process.env.NEXT_PUBLIC_APK_URL || "/api/download-apk";
+    process.env.NEXT_PUBLIC_APK_URL || "/downloads/wheelofcomfort.apk";
 
   const handleDownload = () => {
     setDownloadStarted(true);
