@@ -34,8 +34,10 @@ npm install
 npm run dev
 ```
 
-* **Client Marketplace:** [http://localhost:3000](http://localhost:3000)
-* **Admin Control Center:** [http://localhost:3000/admin](http://localhost:3000/admin)
+* **Live Production Platform:** [https://wheelofcomfort.vercel.app](https://wheelofcomfort.vercel.app)
+* **Live Admin Control Center:** [https://wheelofcomfort.vercel.app/admin](https://wheelofcomfort.vercel.app/admin)
+* **Local Development Marketplace:** [http://localhost:3000](http://localhost:3000)
+* **Local Admin Control Center:** [http://localhost:3000/admin](http://localhost:3000/admin)
 
 #### 🔐 Official Admin Login Credentials:
 * **Email:** `admin@wheelhomes.com`
