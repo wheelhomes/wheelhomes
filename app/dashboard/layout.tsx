@@ -23,6 +23,11 @@ export default function DashboardLayout({
 
         const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
             if (!user) {
+                // Allow unauthenticated applicants to view pending status page directly from email link
+                if (pathname?.includes("/dashboard/pending")) {
+                    setIsLoading(false);
+                    return;
+                }
                 router.push("/signin");
                 return;
             }
@@ -62,7 +67,12 @@ export default function DashboardLayout({
         return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div></div>;
     }
 
-    if (!userProfile) return null;
+    if (!userProfile) {
+        if (pathname?.includes("/dashboard/pending")) {
+            return <>{children}</>;
+        }
+        return null;
+    }
 
     // 1. Pending Review State
     if (userProfile.status === 'pending_review') {

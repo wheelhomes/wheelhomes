@@ -32,17 +32,15 @@ const getBadgeStyles = (color: 'green' | 'amber' | 'red' | 'blue' = 'blue') => {
  */
 export const getAppBaseUrl = (): string => {
   const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (explicit && explicit.trim()) {
+  if (explicit && explicit.trim() && !explicit.includes('localhost')) {
     return explicit.trim().replace(/\/+$/, '');
   }
   if (process.env.VERCEL_URL) {
     const url = process.env.VERCEL_URL.trim().replace(/\/+$/, '');
     return url.startsWith('http') ? url : `https://${url}`;
   }
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://wheelofcomfort.vercel.app';
-  }
-  return 'http://localhost:3000';
+  // Default to live production URL so real emails always link to the live domain
+  return 'https://wheelofcomfort.vercel.app';
 };
 
 

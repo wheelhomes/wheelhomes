@@ -9,10 +9,10 @@ class EmailService {
   static const String _senderEmail = 'wheelofcomfort@gmail.com';
   static const String _senderName = 'Wheel of Comfort';
 
-  /// Base Web Platform URL (defaults to localhost:3000 during development, or production domain)
+  /// Base Web Platform URL (defaults to production domain)
   static const String appBaseUrl = String.fromEnvironment(
     'APP_BASE_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'https://wheelofcomfort.vercel.app',
   );
 
   /// Dispatches the "Successful Onboarding — Account Under Review" confirmation email.
