@@ -6,7 +6,7 @@ import { auth, db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Phone, Lock, User, ArrowRight, X, Eye, EyeOff } from "lucide-react";
+import { Mail, Phone, Lock, User, ArrowRight, X, Eye, EyeOff, Check, Shield } from "lucide-react";
 
 
 export default function SignupPage() {
@@ -24,6 +24,42 @@ export default function SignupPage() {
         confirmPassword: ""
     });
 
+    const getPasswordStrength = (pass: string) => {
+        const criteria = {
+            length: pass.length >= 8,
+            upper: /[A-Z]/.test(pass),
+            number: /[0-9]/.test(pass),
+            special: /[^A-Za-z0-9]/.test(pass),
+        };
+
+        let score = 0;
+        if (criteria.length) score++;
+        if (criteria.upper) score++;
+        if (criteria.number) score++;
+        if (criteria.special) score++;
+
+        let label = "Too weak";
+        let colorClass = "bg-red-500";
+        let textClass = "text-red-500";
+        if (score === 2) {
+            label = "Fair";
+            colorClass = "bg-orange-500";
+            textClass = "text-orange-500";
+        } else if (score === 3) {
+            label = "Good";
+            colorClass = "bg-amber-500";
+            textClass = "text-amber-500";
+        } else if (score === 4) {
+            label = "Strong";
+            colorClass = "bg-emerald-500";
+            textClass = "text-emerald-600";
+        }
+
+        return { score, percent: (score / 4) * 100, label, colorClass, textClass, criteria };
+    };
+
+    const passwordStrength = getPasswordStrength(formData.password);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -32,6 +68,30 @@ export default function SignupPage() {
         e.preventDefault();
         setError("");
         setIsLoading(true);
+
+        if (formData.password.length < 8) {
+            setError("Password must be at least 8 characters long");
+            setIsLoading(false);
+            return;
+        }
+
+        if (!/[A-Z]/.test(formData.password)) {
+            setError("Password must contain at least one uppercase letter (A-Z)");
+            setIsLoading(false);
+            return;
+        }
+
+        if (!/[0-9]/.test(formData.password)) {
+            setError("Password must contain at least one number (0-9)");
+            setIsLoading(false);
+            return;
+        }
+
+        if (!/[^A-Za-z0-9]/.test(formData.password)) {
+            setError("Password must contain at least one special character (e.g. @, $, !, %, *, ?)");
+            setIsLoading(false);
+            return;
+        }
 
         if (formData.password !== formData.confirmPassword) {
             setError("Passwords do not match");
@@ -157,7 +217,7 @@ export default function SignupPage() {
                                     type={showPassword ? "text" : "password"}
                                     required
                                     className="w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all text-sm"
-                                    placeholder="Create password (min 6 characters)"
+                                    placeholder="Create password (e.g. 1@Asdmddmdn)"
                                     value={formData.password}
                                     onChange={handleChange}
                                 />
@@ -170,6 +230,60 @@ export default function SignupPage() {
                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
                             </div>
+
+                            {/* Password Strength Progress Bar & Format Guide */}
+                            {formData.password && (
+                                <div className="mt-2.5 p-3 rounded-xl bg-gray-50/80 border border-gray-100 space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-500 font-medium">Password Strength:</span>
+                                        <span className={`font-bold ${passwordStrength.textClass}`}>
+                                            {passwordStrength.label}
+                                        </span>
+                                    </div>
+
+                                    {/* Progress Bar */}
+                                    <div className="h-1.5 w-full bg-gray-200/80 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-300 rounded-full ${passwordStrength.colorClass}`}
+                                            style={{ width: `${passwordStrength.percent}%` }}
+                                        />
+                                    </div>
+
+                                    {/* Format Checklist */}
+                                    <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                                        <div className={`flex items-center gap-1.5 ${passwordStrength.criteria.length ? "text-emerald-600 font-semibold" : "text-gray-400"}`}>
+                                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${passwordStrength.criteria.length ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>
+                                                {passwordStrength.criteria.length ? "✓" : "•"}
+                                            </span>
+                                            <span>Min 8 characters</span>
+                                        </div>
+                                        <div className={`flex items-center gap-1.5 ${passwordStrength.criteria.upper ? "text-emerald-600 font-semibold" : "text-gray-400"}`}>
+                                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${passwordStrength.criteria.upper ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>
+                                                {passwordStrength.criteria.upper ? "✓" : "•"}
+                                            </span>
+                                            <span>1 uppercase (A-Z)</span>
+                                        </div>
+                                        <div className={`flex items-center gap-1.5 ${passwordStrength.criteria.number ? "text-emerald-600 font-semibold" : "text-gray-400"}`}>
+                                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${passwordStrength.criteria.number ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>
+                                                {passwordStrength.criteria.number ? "✓" : "•"}
+                                            </span>
+                                            <span>1 number (0-9)</span>
+                                        </div>
+                                        <div className={`flex items-center gap-1.5 ${passwordStrength.criteria.special ? "text-emerald-600 font-semibold" : "text-gray-400"}`}>
+                                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${passwordStrength.criteria.special ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>
+                                                {passwordStrength.criteria.special ? "✓" : "•"}
+                                            </span>
+                                            <span>1 symbol (@, $, !)</span>
+                                        </div>
+                                    </div>
+                                    <div className="pt-1 text-[11px] text-gray-500 flex items-center justify-between border-t border-gray-100">
+                                        <span>Format example:</span>
+                                        <span className="font-mono font-semibold text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px]">
+                                            1@Asdmddmdn
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div>
