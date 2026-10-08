@@ -17,7 +17,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -25,11 +27,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   void _submit() async {
     if (_formKey.currentState!.validate()) {
+      if (_passwordController.text != _confirmPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Passwords do not match'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+        return;
+      }
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final success = await authProvider.signUp(
         email: _emailController.text,
@@ -138,6 +151,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   validator: (val) => val == null || val.length < 6 ? 'Minimum 6 characters' : null,
+                ),
+                const SizedBox(height: 18),
+
+                // Confirm Password
+                Text('Confirm Password', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 14)),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    hintText: '••••••••',
+                    prefixIcon: const Icon(LucideIcons.lock, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                    ),
+                  ),
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'Please confirm your password';
+                    if (val != _passwordController.text) return 'Passwords do not match';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 28),
 

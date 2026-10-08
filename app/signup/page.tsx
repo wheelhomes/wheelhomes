@@ -6,13 +6,15 @@ import { auth, db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Phone, Lock, User, ArrowRight, X } from "lucide-react";
+import { Mail, Phone, Lock, User, ArrowRight, X, Eye, EyeOff } from "lucide-react";
 
 
 export default function SignupPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const [formData, setFormData] = useState({
         fullName: "",
@@ -144,37 +146,63 @@ export default function SignupPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Password</label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <input
-                                        name="password"
-                                        type="password"
-                                        required
-                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                        placeholder="••••••"
-                                        value={formData.password}
-                                        onChange={handleChange}
-                                    />
-                                </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                                Password <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    name="password"
+                                    type={showPassword ? "text" : "password"}
+                                    required
+                                    className="w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all text-sm"
+                                    placeholder="Create password (min 6 characters)"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                                    title={showPassword ? "Hide password" : "Show password"}
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Confirm</label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <input
-                                        name="confirmPassword"
-                                        type="password"
-                                        required
-                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                        placeholder="••••••"
-                                        value={formData.confirmPassword}
-                                        onChange={handleChange}
-                                    />
-                                </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                                Confirm Password <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    name="confirmPassword"
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    required
+                                    className={`w-full pl-10 pr-10 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all text-sm ${
+                                        formData.confirmPassword && formData.password !== formData.confirmPassword
+                                            ? "border-red-400 bg-red-50/30"
+                                            : "border-gray-200"
+                                    }`}
+                                    placeholder="Re-enter password to confirm"
+                                    value={formData.confirmPassword}
+                                    onChange={handleChange}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                                    title={showConfirmPassword ? "Hide password" : "Show password"}
+                                >
+                                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
                             </div>
+                            {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                                <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
+                            )}
                         </div>
 
                         <button
