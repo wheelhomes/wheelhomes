@@ -50,20 +50,14 @@ export default function AppDownloadSection() {
 
             {/* CTA Buttons */}
             <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <Link
-                href="/download"
+              <a
+                href="/downloads/wheelofcomfort.apk"
+                download="wheelofcomfort.apk"
                 className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-base shadow-xl shadow-primary/25 transition-all hover:scale-105"
               >
                 <Download className="w-5 h-5" />
-                <span>Download App Now</span>
-              </Link>
-              <Link
-                href="/download"
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl border border-white/20 hover:bg-white/10 text-white font-semibold text-sm transition-all"
-              >
-                <span>View Installation Guide</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+                <span>Download Android App (.APK)</span>
+              </a>
             </div>
           </div>
 
@@ -106,12 +100,13 @@ export default function AppDownloadSection() {
                     </div>
                   </div>
 
-                  <Link
-                    href="/download"
+                  <a
+                    href="/downloads/wheelofcomfort.apk"
+                    download="wheelofcomfort.apk"
                     className="w-full block py-2.5 rounded-xl bg-primary text-white text-center text-xs font-bold shadow-md hover:bg-primary/90 transition-colors"
                   >
-                    Install Standalone APK &rarr;
-                  </Link>
+                    Download Standalone APK &rarr;
+                  </a>
                 </div>
               </div>
             </div>

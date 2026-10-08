@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, User, Phone, Plus, LogOut, Smartphone } from "lucide-react";
+import { Menu, User, Phone, Plus, LogOut, Smartphone, Download } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 
 export default function Header() {
@@ -80,13 +80,15 @@ export default function Header() {
 
                 {/* Right Section */}
                 <div className="hidden lg:flex items-center gap-3">
-                    <Link
-                        href="/download"
+                    <a
+                        href="/downloads/wheelofcomfort.apk"
+                        download="wheelofcomfort.apk"
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border border-primary/40 text-primary bg-primary/10 hover:bg-primary hover:text-white transition-all shadow-sm"
+                        title="Direct Download Wheel of Comfort Android App"
                     >
-                        <Smartphone className="w-3.5 h-3.5" />
+                        <Download className="w-3.5 h-3.5" />
                         <span>Get App</span>
-                    </Link>
+                    </a>
 
                     {!isLoggedIn ? (
                         <>
@@ -133,14 +135,15 @@ export default function Header() {
                     <Link href="/about-us" className="hover:text-primary font-medium text-lg border-b border-gray-50 pb-2">About Us</Link>
                     <Link href="/contact" className="hover:text-primary font-medium text-lg border-b border-gray-50 pb-2">Contact</Link>
 
-                    <Link
-                        href="/download"
+                    <a
+                        href="/downloads/wheelofcomfort.apk"
+                        download="wheelofcomfort.apk"
                         onClick={() => setIsMobileMenuOpen(false)}
                         className="flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-primary text-white font-bold text-center shadow-md hover:opacity-95 transition-all"
                     >
-                        <Smartphone className="w-4 h-4" />
+                        <Download className="w-4 h-4" />
                         <span>Download Mobile App (APK)</span>
-                    </Link>
+                    </a>
 
                     <div className="flex flex-col gap-3 mt-2">
                         {!isLoggedIn ? (

@@ -46,12 +46,14 @@ const Hero = () => {
                                 <ShieldCheck className="w-4 h-4 text-primary" />
                                 <span>Verified & Secure Platform</span>
                             </div>
-                            <Link
-                                href="/download"
+                            <a
+                                href="/downloads/wheelofcomfort.apk"
+                                download="wheelofcomfort.apk"
                                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-primary/20 hover:bg-primary/30 border border-primary/40 text-sky-300 text-xs font-semibold backdrop-blur-sm transition-all hover:scale-105"
+                                title="Download Android App (APK)"
                             >
                                 <span>📱 Download App (APK)</span>
-                            </Link>
+                            </a>
                         </div>
 
                         <div className="space-y-4">
