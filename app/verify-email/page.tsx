@@ -52,13 +52,43 @@ export default function VerifyEmailPage() {
         setIsVerified(true);
         setMessage("Success! Email Verified.");
 
-        // Update Firestore status
-        await updateDoc(doc(db, "users", uid), { status: "verified" });
+        try {
+            // Check existing role and status before updating
+            const snap = await getDoc(doc(db, "users", uid));
+            const data = snap.exists() ? snap.data() : {};
 
-        // Proceed to next step
-        setTimeout(() => {
-            router.push("/role-selection");
-        }, 1500);
+            // Record emailVerified without clobbering provider status
+            const updates: Record<string, any> = { emailVerified: true };
+            if (!data.status || data.status === 'unverified') {
+                updates.status = 'verified';
+            }
+            await updateDoc(doc(db, "users", uid), updates);
+
+            // Determine appropriate next route
+            let targetRoute = "/role-selection";
+            if (data.role && data.role !== 'pending_role_selection') {
+                if (data.status === 'approved') {
+                    targetRoute = data.role === 'service_provider' ? "/dashboard/provider" : "/dashboard/user";
+                } else if (data.status === 'pending_review' || data.status === 'pending') {
+                    targetRoute = "/dashboard/pending";
+                } else if (data.status === 'rejected' || data.status === 'restricted') {
+                    targetRoute = "/settings/verification";
+                } else if (data.role === 'service_provider') {
+                    targetRoute = "/register/provider";
+                } else {
+                    targetRoute = "/onboarding/profile";
+                }
+            }
+
+            setTimeout(() => {
+                router.push(targetRoute);
+            }, 1200);
+        } catch (err) {
+            console.error("Error finalizing email verification:", err);
+            setTimeout(() => {
+                router.push("/role-selection");
+            }, 1200);
+        }
     };
 
     const resendEmail = async () => {
@@ -113,13 +143,14 @@ export default function VerifyEmailPage() {
                                 <RefreshCw className="w-3 h-3" /> Resend Link
                             </button>
 
-                            <button
-                                onClick={() => handleVerificationSuccess(auth.currentUser?.uid || "")}
-                                className="text-xs text-orange-400 hover:text-orange-600 font-medium underline mt-4"
-                            >
-                                [Developer Bypass]: Skip Email Verification
-                            </button>
-                            <p className="text-xs text-gray-400 mt-1">Use this if emails are delayed (Google Free Tier Latency)</p>
+                            {process.env.NODE_ENV === 'development' && (
+                                <button
+                                    onClick={() => handleVerificationSuccess(auth.currentUser?.uid || "")}
+                                    className="text-xs text-orange-400 hover:text-orange-600 font-medium underline mt-4"
+                                >
+                                    [Dev Mode]: Skip Email Verification
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}

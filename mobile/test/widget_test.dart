@@ -206,5 +206,77 @@ void main() {
 
     expect(verifiedUser.isVerified, true);
     expect(verifiedUser.isPendingReview, false);
+
+    // Strict Service Provider KYC Verification Tests
+    final providerEmailVerifiedOnly = UserProfile.fromMap({
+      'email': 'plumber@wheelhomes.com',
+      'fullName': 'Emeka Plumber',
+      'phone': '+234 809 111 2233',
+      'role': 'service_provider',
+      'status': 'verified', // Only email verified, KYC not approved yet!
+    }, 'provider_email_only');
+
+    // Providers must NOT be considered verified until admin approves KYC
+    expect(providerEmailVerifiedOnly.isVerified, false);
+    expect(providerEmailVerifiedOnly.isApproved, false);
+
+    final providerApproved = UserProfile.fromMap({
+      'email': 'plumber@wheelhomes.com',
+      'fullName': 'Emeka Plumber',
+      'phone': '+234 809 111 2233',
+      'role': 'service_provider',
+      'status': 'approved', // Fully approved by admin
+    }, 'provider_approved');
+
+    expect(providerApproved.isVerified, true);
+    expect(providerApproved.isApproved, true);
+
+    // Job Photos Parsing Test (Minimum 3 Photos for Providers)
+    final providerWithJobPhotos = UserProfile.fromMap({
+      'email': 'plumber@wheelhomes.com',
+      'fullName': 'Emeka Plumber',
+      'role': 'service_provider',
+      'status': 'pending_review',
+      'applicationData': {
+        'jobPhotos': [
+          'https://res.cloudinary.com/test/photo1.jpg',
+          'https://res.cloudinary.com/test/photo2.jpg',
+          'https://res.cloudinary.com/test/photo3.jpg',
+        ],
+      },
+    }, 'provider_photos_test');
+
+    expect(providerWithJobPhotos.jobPhotos.length, 3);
+    expect(providerWithJobPhotos.jobPhotos.length >= 3, true);
+  });
+
+  test('Service provider role restricts service request creation', () {
+    final artisan = UserProfile(
+      uid: 'artisan_01',
+      email: 'artisan@wheelhomes.com',
+      fullName: 'Carpenter Joe',
+      phone: '+234 802 000 1111',
+      role: 'service_provider',
+      status: 'pending_review',
+      createdAt: '2026-10-12T00:00:00Z',
+    );
+
+    final client = UserProfile(
+      uid: 'client_01',
+      email: 'client@wheelhomes.com',
+      fullName: 'Home Owner',
+      phone: '+234 803 222 3333',
+      role: 'user',
+      status: 'verified',
+      createdAt: '2026-10-12T00:00:00Z',
+    );
+
+    // Artisans provide services and cannot create client repair requests
+    final artisanCanCreateRequest = artisan.role != 'service_provider' && artisan.role != 'agent';
+    final clientCanCreateRequest = client.role != 'service_provider' && client.role != 'agent';
+
+    expect(artisanCanCreateRequest, false);
+    expect(clientCanCreateRequest, true);
+    expect(artisan.isServiceProvider, true);
   });
 }

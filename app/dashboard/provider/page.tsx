@@ -73,12 +73,20 @@ export default function ProviderDashboard() {
             try {
                 const userDoc = await getDoc(doc(db, "users", storedId));
                 if (userDoc.exists()) {
-                    setProviderName(userDoc.data().fullName || "Partner");
                     const data = userDoc.data();
-                    if (data.status === 'rejected') {
-                        setRejectionReason(data.rejectionReason || "No reason provided.");
-                        setIsRejected(true);
+                    if (data.status !== 'approved') {
+                        if (data.status === 'pending_review' || data.status === 'pending') {
+                            router.replace("/dashboard/pending");
+                            return;
+                        } else if (data.status === 'rejected' || data.status === 'restricted') {
+                            router.replace("/settings/verification");
+                            return;
+                        } else {
+                            router.replace("/register/provider");
+                            return;
+                        }
                     }
+                    setProviderName(data.fullName || "Partner");
                 }
             } catch (e) {
                 console.error("Profile fetch error", e);
@@ -163,6 +171,13 @@ export default function ProviderDashboard() {
 
     const handleAccept = async (jobId: string) => {
         try {
+            if (!providerId) return;
+            const userDoc = await getDoc(doc(db, "users", providerId));
+            if (!userDoc.exists() || userDoc.data().status !== 'approved') {
+                alert("Your account must be approved by an administrator before accepting jobs.");
+                return;
+            }
+
             const job = jobs.find(j => j.id === jobId);
             await updateDoc(doc(db, "job_requests", jobId), { status: 'accepted' });
 

@@ -183,6 +183,53 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userProfile = authProvider.userProfile;
+
+    if (userProfile?.role == 'service_provider') {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Service Requests'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.briefcase, size: 48, color: AppTheme.primary),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Service Provider Account',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'As an artisan, you fulfill client service requests rather than creating new requests. Check the Provider Job Hub to view available jobs.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Back to Home'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final requestProvider = Provider.of<RequestProvider>(context);
 
     return Scaffold(

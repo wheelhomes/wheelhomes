@@ -58,10 +58,19 @@ class UserProfile {
   }
 
   // Verification Helper Getters
-  bool get isVerified => status == 'approved' || status == 'verified';
-  bool get isPendingReview => status == 'pending_review';
+  // For service providers, strict admin approval ('approved') is required before activation
+  bool get isVerified {
+    if (role == 'service_provider') {
+      return status == 'approved';
+    }
+    return status == 'approved' || status == 'verified';
+  }
+  bool get isApproved => status == 'approved';
+  bool get isPendingReview => status == 'pending_review' || status == 'pending';
   bool get isUnverified => status == 'unverified' || status.isEmpty;
   bool get isRejected => status == 'rejected' || status == 'restricted';
+  bool get isServiceProvider => role == 'service_provider';
+  bool get isAgent => role == 'agent';
 
   String? get govIdUrl => applicationData?['govIdUrl'] as String?;
   String? get passportUrl => applicationData?['passportUrl'] as String?;

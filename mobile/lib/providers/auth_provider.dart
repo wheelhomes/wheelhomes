@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../core/auth_error_helper.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
 
   User? _user;
   UserProfile? _userProfile;
+  StreamSubscription<UserProfile?>? _profileSubscription;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -21,12 +24,16 @@ class AuthProvider with ChangeNotifier {
   AuthProvider() {
     _authService.authStateChanges.listen((user) async {
       _user = user;
+      _profileSubscription?.cancel();
       if (user != null) {
-        await fetchProfile(user.uid);
+        _profileSubscription = _authService.userProfileStream(user.uid).listen((profile) {
+          _userProfile = profile;
+          notifyListeners();
+        });
       } else {
         _userProfile = null;
+        notifyListeners();
       }
-      notifyListeners();
     });
   }
 
@@ -41,7 +48,7 @@ class AuthProvider with ChangeNotifier {
       _setLoading(false);
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(AuthErrorHelper.format(e));
       _setLoading(false);
       return false;
     }
@@ -68,7 +75,21 @@ class AuthProvider with ChangeNotifier {
       _setLoading(false);
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(AuthErrorHelper.format(e));
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> sendPasswordReset(String email) async {
+    _setLoading(true);
+    _clearError();
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(AuthErrorHelper.format(e));
       _setLoading(false);
       return false;
     }
@@ -81,7 +102,7 @@ class AuthProvider with ChangeNotifier {
       await _authService.updateUserRole(_user!.uid, role);
       await fetchProfile(_user!.uid);
     } catch (e) {
-      _setError(e.toString());
+      _setError(AuthErrorHelper.format(e));
     } finally {
       _setLoading(false);
     }
@@ -89,9 +110,12 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> submitKycVerification({
     required String idType,
-    required File govIdFile,
-    required File passportFile,
+    File? govIdFile,
+    File? passportFile,
+    String? existingGovIdUrl,
+    String? existingPassportUrl,
     List<File> jobPhotoFiles = const [],
+    List<String> existingJobPhotoUrls = const [],
     String? bio,
     String? serviceCategory,
   }) async {
@@ -104,7 +128,10 @@ class AuthProvider with ChangeNotifier {
         idType: idType,
         govIdFile: govIdFile,
         passportFile: passportFile,
+        existingGovIdUrl: existingGovIdUrl,
+        existingPassportUrl: existingPassportUrl,
         jobPhotoFiles: jobPhotoFiles,
+        existingJobPhotoUrls: existingJobPhotoUrls,
         bio: bio,
         serviceCategory: serviceCategory,
       );
@@ -112,7 +139,7 @@ class AuthProvider with ChangeNotifier {
       _setLoading(false);
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(AuthErrorHelper.format(e));
       _setLoading(false);
       return false;
     }
@@ -123,15 +150,23 @@ class AuthProvider with ChangeNotifier {
       _userProfile = await _authService.getUserProfile(uid);
       notifyListeners();
     } catch (e) {
-      print('Error fetching user profile: $e');
+      debugPrint('Error fetching user profile: $e');
     }
   }
 
   Future<void> signOut() async {
+    _profileSubscription?.cancel();
+    _profileSubscription = null;
     await _authService.signOut();
     _user = null;
     _userProfile = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _profileSubscription?.cancel();
+    super.dispose();
   }
 
   void _setLoading(bool val) {
@@ -141,6 +176,11 @@ class AuthProvider with ChangeNotifier {
 
   void _setError(String msg) {
     _errorMessage = msg;
+    notifyListeners();
+  }
+
+  void clearError() {
+    _clearError();
     notifyListeners();
   }
 

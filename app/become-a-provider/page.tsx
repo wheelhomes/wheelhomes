@@ -1,11 +1,14 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 import { CheckCircle2, ShieldCheck, TrendingUp, Wallet } from "lucide-react";
 
 export default function BecomeProviderPage() {
+    const router = useRouter();
     return (
         <main className="min-h-screen bg-white">
 
@@ -24,8 +27,12 @@ export default function BecomeProviderPage() {
                             Join the elite network of verified professionals. Get steady jobs, guaranteed payments, and admin support.
                         </p>
                         <div className="flex gap-4 pt-4">
-                            <Button size="xl" variant="primary">Apply Now</Button>
-                            <Button size="xl" variant="outline" className="text-white border-white hover:bg-white hover:text-accent">Learn More</Button>
+                            <Link href="/signup">
+                                <Button size="xl" variant="primary">Apply Now</Button>
+                            </Link>
+                            <Link href="/how-it-works">
+                                <Button size="xl" variant="outline" className="text-white border-white hover:bg-white hover:text-accent">Learn More</Button>
+                            </Link>
                         </div>
                     </div>
                     <div className="relative hidden lg:block">
@@ -133,7 +140,13 @@ export default function BecomeProviderPage() {
                         </div>
                         <div className="bg-white/5 rounded-2xl p-8 border border-white/10">
                             <h3 className="text-2xl font-bold mb-6 text-center">Ready to join?</h3>
-                            <form className="space-y-4">
+                            <form
+                                className="space-y-4"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    router.push("/signup");
+                                }}
+                            >
                                 <input type="text" placeholder="Full Name" className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-primary" />
                                 <input type="email" placeholder="Email Address" className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-primary" />
                                 <select className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-gray-500 focus:outline-none focus:border-primary">
@@ -143,7 +156,7 @@ export default function BecomeProviderPage() {
                                     <option>HVAC</option>
                                     <option>Cleaning</option>
                                 </select>
-                                <Button fullWidth size="lg">Start Application</Button>
+                                <Button type="submit" fullWidth size="lg">Start Application</Button>
                             </form>
                         </div>
                     </div>

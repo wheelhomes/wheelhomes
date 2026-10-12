@@ -3,11 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
+import 'document_upload_screen.dart';
 
 /// Screen shown to Service Providers / Agents whose KYC documents
-/// have been submitted and are awaiting admin approval.
-/// This screen BLOCKS access to the main app until status changes
-/// from 'pending_review' to 'approved' / 'verified'.
+/// have been submitted and are awaiting admin approval or require updates.
 class PendingApprovalScreen extends StatelessWidget {
   const PendingApprovalScreen({super.key});
 
@@ -15,17 +14,32 @@ class PendingApprovalScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final profile = authProvider.userProfile;
+    final isRejected = profile?.isRejected == true;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        // Only show a back arrow when this screen was pushed on top of another
+        // (e.g. from Profile). As the root gate, there is nowhere to go back to.
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
+                tooltip: 'Back',
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           child: Column(
             children: [
-              const Spacer(flex: 2),
+              const SizedBox(height: 8),
 
-              // Animated clock illustration
+              // Animated illustration (Clock for pending, Alert for rejected)
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 800),
@@ -39,29 +53,29 @@ class PendingApprovalScreen extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: isRejected ? const Color(0xFFFEF2F2) : const Color(0xFFEFF6FF),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.15),
+                        color: (isRejected ? AppTheme.error : AppTheme.primary).withValues(alpha: 0.15),
                         blurRadius: 40,
                         spreadRadius: 8,
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    LucideIcons.clockAlert,
+                  child: Icon(
+                    isRejected ? LucideIcons.alertTriangle : LucideIcons.clockAlert,
                     size: 64,
-                    color: Color(0xFF1D4ED8),
+                    color: isRejected ? const Color(0xFFDC2626) : const Color(0xFF1D4ED8),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 36),
+              const SizedBox(height: 28),
 
               // Title
               Text(
-                'Verification in Progress',
+                isRejected ? 'Application Needs Updates' : 'Verification in Progress',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
@@ -69,20 +83,24 @@ class PendingApprovalScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Description
               Text(
-                'Your identity documents have been submitted and are currently being reviewed by the Wheel of Comfort compliance team.',
+                isRejected
+                    ? (profile?.rejectionReason != null && profile!.rejectionReason!.isNotEmpty
+                        ? profile.rejectionReason!
+                        : 'The compliance team has reviewed your documents and requested changes before approving your provider account.')
+                    : 'Your identity documents and trade portfolio have been submitted and are currently being reviewed by the Wheel of Comfort compliance team.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textSecondary,
+                  color: isRejected ? const Color(0xFFB91C1C) : AppTheme.textSecondary,
                   height: 1.5,
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               // Status info card
               Container(
@@ -90,7 +108,14 @@ class PendingApprovalScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.border),
+                  border: Border.all(color: isRejected ? const Color(0xFFFECACA) : AppTheme.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
@@ -113,48 +138,67 @@ class PendingApprovalScreen extends StatelessWidget {
                     ),
                     const Divider(height: 20),
                     _buildInfoRow(
-                      icon: LucideIcons.shieldCheck,
+                      icon: isRejected ? LucideIcons.alertCircle : LucideIcons.shieldCheck,
                       label: 'Status',
-                      value: 'Pending Review',
-                      valueColor: const Color(0xFF1D4ED8),
+                      value: isRejected ? 'Updates Required' : 'Pending Review',
+                      valueColor: isRejected ? const Color(0xFFDC2626) : const Color(0xFF1D4ED8),
                     ),
+                    if (isRejected && profile?.rejectionReason != null && profile!.rejectionReason!.isNotEmpty) ...[
+                      const Divider(height: 20),
+                      _buildInfoRow(
+                        icon: LucideIcons.messageSquare,
+                        label: 'Reason',
+                        value: profile.rejectionReason!,
+                        valueColor: const Color(0xFFDC2626),
+                      ),
+                    ],
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // What happens next
+              // What happens next banner
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
+                  color: isRejected ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: isRejected
+                        ? const Color(0xFFFECACA)
+                        : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                  ),
                 ),
-                child: const Row(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(LucideIcons.info, color: Color(0xFFB45309), size: 20),
-                    SizedBox(width: 12),
+                    Icon(
+                      isRejected ? LucideIcons.alertTriangle : LucideIcons.info,
+                      color: isRejected ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'What happens next?',
+                            isRejected ? 'How to resolve this?' : 'What happens next?',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Color(0xFFB45309),
+                              color: isRejected ? const Color(0xFF991B1B) : const Color(0xFFB45309),
                             ),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            'Our team typically reviews documents within 24–48 hours. You will receive a notification once your account is verified and unlocked.',
+                            isRejected
+                                ? 'Tap the button below to review your documents and upload clearer photos of your Government ID, passport photograph, or proof of work.'
+                                : 'Our team typically reviews documents within 24–48 hours. You will receive an email and notification once your account is verified and unlocked.',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFFB45309),
+                              color: isRejected ? const Color(0xFFB91C1C) : const Color(0xFFB45309),
                               height: 1.4,
                             ),
                           ),
@@ -165,39 +209,104 @@ class PendingApprovalScreen extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(flex: 2),
+              const SizedBox(height: 28),
 
-              // Refresh button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton.icon(
-                  onPressed: authProvider.isLoading
-                      ? null
-                      : () async {
-                          if (authProvider.user != null) {
-                            await authProvider.fetchProfile(authProvider.user!.uid);
-                          }
-                        },
-                  icon: authProvider.isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(LucideIcons.refreshCw, size: 18),
-                  label: Text(
-                    authProvider.isLoading ? 'Checking...' : 'Check Approval Status',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              // If rejected: Primary button is "Update & Re-Submit Documents"
+              if (isRejected) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+                      );
+                    },
+                    icon: const Icon(LucideIcons.uploadCloud, size: 18),
+                    label: const Text(
+                      'Update & Re-Submit Documents',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    side: const BorderSide(color: AppTheme.primary),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ] else ...[
+                // Refresh button for pending
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: authProvider.isLoading
+                        ? null
+                        : () async {
+                            if (authProvider.user != null) {
+                              await authProvider.fetchProfile(authProvider.user!.uid);
+                              if (context.mounted) {
+                                final updated = authProvider.userProfile;
+                                if (updated != null && updated.isVerified) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Congratulations! Your account is now verified and active.'),
+                                      backgroundColor: AppTheme.accent,
+                                    ),
+                                  );
+                                  // AuthWrapper reacts to the approved status and
+                                  // shows the role's dashboard at the root.
+                                  Navigator.of(context).popUntil((route) => route.isFirst);
+                                } else if (updated != null && updated.isRejected) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Application rejected: ${updated.rejectionReason ?? "Updates needed"}'),
+                                      backgroundColor: AppTheme.error,
+                                      duration: const Duration(seconds: 4),
+                                    ),
+                                  );
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Your account is still under review by our compliance team.'),
+                                      duration: Duration(seconds: 3),
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          },
+                    icon: authProvider.isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.refreshCw, size: 18),
+                    label: Text(
+                      authProvider.isLoading ? 'Checking...' : 'Check Approval Status',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: const BorderSide(color: AppTheme.primary),
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // What gets unlocked after approval (role-specific)
+              _buildUnlockCard(profile?.role ?? ''),
 
               const SizedBox(height: 12),
 
@@ -211,10 +320,87 @@ class PendingApprovalScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildUnlockCard(String role) {
+    final isAgent = role == 'agent';
+    final items = isAgent
+        ? const [
+            (LucideIcons.building2, 'Publish property listings', 'List rentals and sales visible to verified clients.'),
+            (LucideIcons.messageSquare, 'Receive client enquiries', 'Chat directly with interested tenants and buyers.'),
+            (LucideIcons.badgeCheck, 'Verified agent badge', 'Stand out as a trusted, compliance-checked agent.'),
+          ]
+        : const [
+            (LucideIcons.briefcase, 'Receive job requests', 'Get matched with clients who need your trade.'),
+            (LucideIcons.messageSquare, 'Chat with clients', 'Agree on scope, timing and pricing in-app.'),
+            (LucideIcons.wallet, 'Guaranteed escrow payouts', 'Clients pay upfront; funds release when work is done.'),
+          ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(LucideIcons.lockKeyhole, size: 16, color: AppTheme.textSecondary),
+              SizedBox(width: 8),
+              Text(
+                'UNLOCKED AFTER APPROVAL',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.6,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          for (final (icon, title, subtitle) in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 18, color: AppTheme.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

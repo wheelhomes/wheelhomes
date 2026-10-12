@@ -64,23 +64,15 @@ export default function VerificationSettingsPage() {
             let updates: any = {};
             let appDataUpdates: any = {};
 
-            // Re-upload ID if selected and previously rejected
-            if (idFile && user.rejectedDocs?.includes('govId')) {
+            // Re-upload ID if selected
+            if (idFile) {
                 const compressedId = await compressImageToBase64(idFile);
-                // STORAGE BYPASS: Save Base64 directly to Firestore to avoid "Storage Not Enabled" issues
-                // const idRef = ref(storage, `provider_docs/${user.uid}/gov_id`);
-                // await uploadString(idRef, compressedId, 'data_url');
-                // const idUrl = await getDownloadURL(idRef);
                 appDataUpdates.govIdUrl = compressedId;
             }
 
-            // Re-upload Passport if selected and previously rejected
-            if (passportFile && user.rejectedDocs?.includes('passport')) {
+            // Re-upload Passport if selected
+            if (passportFile) {
                 const compressedPass = await compressImageToBase64(passportFile);
-                // STORAGE BYPASS: Save Base64 directly to Firestore
-                // const passRef = ref(storage, `provider_docs/${user.uid}/passport`);
-                // await uploadString(passRef, compressedPass, 'data_url');
-                // const passportUrl = await getDownloadURL(passRef);
                 appDataUpdates.passportUrl = compressedPass;
             }
 
@@ -93,9 +85,11 @@ export default function VerificationSettingsPage() {
 
             // Update User Doc
             await updateDoc(doc(db, "users", user.uid), {
-                status: "pending_review", // Reset status to pending
+                status: "pending_review", // Reset status to pending review
+                rejectionReason: null,
+                rejectedDocs: [],
                 "applicationData": {
-                    ...user.applicationData,
+                    ...(user.applicationData || {}),
                     ...appDataUpdates,
                     resubmittedAt: new Date().toISOString()
                 },
@@ -108,7 +102,7 @@ export default function VerificationSettingsPage() {
             }
 
             alert("Documents re-uploaded successfully! Your account is now under review.");
-            window.location.reload(); // Reload to reflect status changes
+            router.push("/dashboard/pending");
 
         } catch (error: any) {
             console.error("Re-upload error:", error);
@@ -121,11 +115,13 @@ export default function VerificationSettingsPage() {
     if (isLoading) return <div className="p-8 text-center">Loading verification status...</div>;
     if (!user) return <div className="p-8 text-center">User not found.</div>;
 
-    const isRestricted = user.status === 'restricted';
+    const isActionRequired = user.status === 'restricted' || user.status === 'rejected';
     const rejectedDocs = user.rejectedDocs || [];
 
     const getDocStatus = (docType: string) => {
-        if (isRestricted && rejectedDocs.includes(docType)) return 'rejected';
+        if (isActionRequired) {
+            if (rejectedDocs.length === 0 || rejectedDocs.includes(docType)) return 'rejected';
+        }
         if (user.status === 'approved') return 'approved';
         return 'pending'; // Default or under review
     };
@@ -138,7 +134,7 @@ export default function VerificationSettingsPage() {
                     <p className="text-gray-600 mt-2">Manage your identity verification documents to ensure account access.</p>
                 </div>
 
-                {isRestricted && (
+                {isActionRequired && (
                     <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8 flex gap-4 items-start animate-in slide-in-from-top-2">
                         <div className="p-2 bg-red-100 rounded-full shrink-0">
                             <AlertCircle className="w-6 h-6 text-red-600" />
@@ -146,8 +142,12 @@ export default function VerificationSettingsPage() {
                         <div>
                             <h3 className="font-bold text-red-900">Action Required: Re-upload Documents</h3>
                             <p className="text-sm text-red-700 mt-1">
-                                Your application was rejected because some documents were invalid.
-                                <br /><strong>Reason:</strong> {user.rejectionReason}
+                                Your application requires attention before it can be approved.
+                                {user.rejectionReason && (
+                                    <>
+                                        <br /><strong>Feedback:</strong> {user.rejectionReason}
+                                    </>
+                                )}
                             </p>
                         </div>
                     </div>
@@ -235,7 +235,7 @@ export default function VerificationSettingsPage() {
                     </div>
                 </div>
 
-                {isRestricted && (idFile || passportFile) && (
+                {isActionRequired && (idFile || passportFile) && (
                     <div className="mt-8 flex justify-end">
                         <button
                             onClick={handleReupload}

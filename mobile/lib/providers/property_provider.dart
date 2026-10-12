@@ -28,7 +28,10 @@ class PropertyProvider with ChangeNotifier {
   }
 
   String get selectedCategory => _selectedCategory;
+  String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
+  bool get hasActiveFilters => _selectedCategory != 'All' || _searchQuery.isNotEmpty;
+  bool get isEmptyListing => _properties.isEmpty && !_isLoading;
 
   PropertyProvider() {
     _initStream();
@@ -41,6 +44,7 @@ class PropertyProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }, onError: (e) {
+      _properties = [];
       _isLoading = false;
       notifyListeners();
     });

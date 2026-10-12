@@ -56,6 +56,16 @@ class FirestoreService {
     required String jobId,
     required String providerId,
   }) async {
+    // Security Guard: Provider must be fully approved by admin before accepting any job
+    final providerDoc = await _firestore.collection('users').doc(providerId).get();
+    final providerData = providerDoc.data();
+    final providerRole = providerData?['role'];
+    final providerStatus = providerData?['status'];
+
+    if (providerRole == 'service_provider' && providerStatus != 'approved') {
+      throw Exception('Service provider account must be approved by admin before accepting job requests.');
+    }
+
     await _firestore.collection('requests').doc(jobId).update({
       'status': 'assigned',
       'providerId': providerId,

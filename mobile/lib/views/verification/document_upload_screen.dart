@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
+import 'pending_approval_screen.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
   const DocumentUploadScreen({super.key});
@@ -132,9 +133,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     if (_isUploading) return;
     if (_currentStep > 0) {
       _goToStep(_currentStep - 1);
-    } else {
-      _showChangeRoleDialog();
+    } else if (Navigator.canPop(context)) {
+      Navigator.pop(context);
     }
+    // At the root gate there is nowhere to go back to: verification must be
+    // completed (or the user can sign out / change role from the menu).
   }
 
   void _showChangeRoleDialog() {
@@ -391,6 +394,18 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       return;
     }
 
+    final totalWorkPhotos = _jobPhotoFiles.length + _existingJobPhotoUrls.length;
+    if (totalWorkPhotos < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please upload at least 3 proof of work photos (currently $totalWorkPhotos of 3 required).'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      _goToStep(1);
+      return;
+    }
+
     if (!_declarationAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -409,9 +424,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     try {
       final success = await authProvider.submitKycVerification(
         idType: _selectedIdType,
-        govIdFile: _govIdFile!,
-        passportFile: _passportFile!,
+        govIdFile: _govIdFile,
+        passportFile: _passportFile,
+        existingGovIdUrl: profile?.govIdUrl,
+        existingPassportUrl: profile?.passportUrl,
         jobPhotoFiles: _jobPhotoFiles,
+        existingJobPhotoUrls: _existingJobPhotoUrls,
         bio: _bioController.text.trim(),
         serviceCategory: _selectedCategory,
       );
@@ -426,6 +444,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
             duration: Duration(seconds: 4),
           ),
         );
+        if (mounted) {
+          // Return to the root; AuthWrapper now shows the pending review gate.
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -467,6 +490,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       );
     }
 
+    if (profile?.isPendingReview == true && !_isUploading) {
+      return const PendingApprovalScreen();
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -478,11 +505,17 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          leading: IconButton(
-            icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
-            tooltip: _currentStep > 0 ? 'Previous Step' : 'Back to Roles',
-            onPressed: _handleBack,
-          ),
+          automaticallyImplyLeading: false,
+          leading: (_currentStep > 0 || Navigator.canPop(context))
+              ? IconButton(
+                  icon: Icon(
+                    _currentStep > 0 ? LucideIcons.arrowLeft : LucideIcons.x,
+                    color: AppTheme.textPrimary,
+                  ),
+                  tooltip: _currentStep > 0 ? 'Previous Step' : 'Close',
+                  onPressed: _handleBack,
+                )
+              : null,
           title: Text(
             _getStepTitle(),
             style: const TextStyle(
@@ -493,7 +526,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ),
           actions: [
             Container(
-              margin: const EdgeInsets.only(right: 16),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.1),
@@ -508,20 +540,84 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 ),
               ),
             ),
+            PopupMenuButton<String>(
+              icon: const Icon(LucideIcons.moreVertical, color: AppTheme.textPrimary, size: 20),
+              tooltip: 'More options',
+              onSelected: (val) async {
+                if (val == 'role') {
+                  _showChangeRoleDialog();
+                } else if (val == 'logout') {
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Sign Out?'),
+                      content: const Text('Your draft information is saved. You can sign back in anytime to continue verification.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+                          child: const Text('Sign Out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await authProvider.signOut();
+                  }
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'role',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.users, size: 16, color: AppTheme.textSecondary),
+                      SizedBox(width: 10),
+                      Text('Change Account Type'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.logOut, size: 16, color: AppTheme.error),
+                      SizedBox(width: 10),
+                      Text('Sign Out', style: TextStyle(color: AppTheme.error)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
           ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(48),
             child: _buildStepProgressBar(),
           ),
         ),
-        body: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
+        body: Column(
           children: [
-            _buildStep0TradeAndBio(status, profile?.rejectionReason),
-            _buildStep1JobPhotos(),
-            _buildStep2GovId(profile?.govIdUrl),
-            _buildStep3PassportAndSubmit(profile?.passportUrl),
+            if (profile?.isRejected == true)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: _buildStatusHeader(status, profile?.rejectionReason),
+              ),
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildStep0TradeAndBio(status, profile?.rejectionReason),
+                  _buildStep1JobPhotos(),
+                  _buildStep2GovId(profile?.govIdUrl),
+                  _buildStep3PassportAndSubmit(profile?.passportUrl),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -533,7 +629,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       case 0:
         return 'Trade & Experience';
       case 1:
-        return 'Proof of Work & Photos';
+        return 'Proof of Work (Min 3 Photos)';
       case 2:
         return 'Government ID';
       case 3:
@@ -556,7 +652,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
             children: [
               _buildStepDot(0, 'Trade', LucideIcons.briefcase),
               _buildStepConnector(0),
-              _buildStepDot(1, 'Photos', LucideIcons.camera),
+              _buildStepDot(1, 'Photos (Min 3)', LucideIcons.camera),
               _buildStepConnector(1),
               _buildStepDot(2, 'Gov ID', LucideIcons.fileText),
               _buildStepConnector(2),
@@ -661,11 +757,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (status == 'rejected') ...[
-            _buildStatusHeader(status, rejectionReason),
-            const SizedBox(height: 16),
-          ],
-
           // Intro banner
           Container(
             padding: const EdgeInsets.all(16),
@@ -805,8 +896,13 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   // ─────────────────────────────────────────────────────────────
   // STEP 1: Proof of Work & Job Photos
   // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // STEP 1: Upload Proof of Work & Job Photos (Minimum 3 Photos)
+  // ─────────────────────────────────────────────────────────────
   Widget _buildStep1JobPhotos() {
     final totalPhotos = _jobPhotoFiles.length + _existingJobPhotoUrls.length;
+    final hasMetMinimum = totalPhotos >= 3;
+    final remainingForMin = 3 - totalPhotos;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -824,16 +920,39 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 child: const Icon(LucideIcons.camera, color: AppTheme.accent, size: 20),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Proof of Work & Job Photos',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    Row(
+                      children: [
+                        const Text(
+                          'Proof of Work & Job Photos',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: hasMetMinimum ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: hasMetMinimum ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA),
+                            ),
+                          ),
+                          child: Text(
+                            hasMetMinimum ? 'Min Met' : 'Min 3 Required',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: hasMetMinimum ? const Color(0xFF047857) : const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'Photos of past completed jobs, installations, or projects',
+                    const Text(
+                      'Minimum 3 photos of past completed jobs, installations, or projects',
                       style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                     ),
                   ],
@@ -844,23 +963,51 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
           const SizedBox(height: 16),
 
-          // Benefit notice card
+          // Minimum 3 Requirement & Benefit Card
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: hasMetMinimum ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFBFDBFE)),
+              border: Border.all(
+                color: hasMetMinimum ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+              ),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(LucideIcons.sparkles, size: 18, color: Color(0xFF0284C7)),
-                SizedBox(width: 10),
+                Icon(
+                  hasMetMinimum ? LucideIcons.checkCircle2 : LucideIcons.alertTriangle,
+                  size: 20,
+                  color: hasMetMinimum ? const Color(0xFF047857) : const Color(0xFFD97706),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Applicants with clear photos of past completed work receive faster approval and up to 3x more client hiring requests.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF0369A1), height: 1.4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasMetMinimum
+                            ? 'Minimum 3 Photos Requirement Met ($totalPhotos/5 uploaded) ✅'
+                            : 'Minimum 3 Work Photos Required ($totalPhotos/3 uploaded)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: hasMetMinimum ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasMetMinimum
+                            ? 'Great job! You have satisfied the 3-photo requirement. You may upload up to ${5 - totalPhotos} more photo${5 - totalPhotos == 1 ? '' : 's'} if desired.'
+                            : 'Admin verification requires at least 3 clear photos of your real work (installations, repairs, maintenance) to verify your skills and approve your account. Please upload $remainingForMin more photo${remainingForMin == 1 ? '' : 's'}.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hasMetMinimum ? const Color(0xFF047857) : const Color(0xFFB45309),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -873,25 +1020,56 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Work Photos (Up to 5)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              Row(
+                children: [
+                  const Text(
+                    'Work Photos',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: hasMetMinimum ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: hasMetMinimum ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA),
+                      ),
+                    ),
+                    child: Text(
+                      hasMetMinimum ? 'Requirement Met' : '$remainingForMin More Needed',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: hasMetMinimum ? const Color(0xFF047857) : const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: totalPhotos > 0 ? const Color(0xFFECFDF5) : Colors.grey.shade100,
+                  color: hasMetMinimum
+                      ? const Color(0xFFECFDF5)
+                      : (totalPhotos > 0 ? const Color(0xFFFFFBEB) : Colors.grey.shade100),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: totalPhotos > 0 ? const Color(0xFFA7F3D0) : Colors.grey.shade300,
+                    color: hasMetMinimum
+                        ? const Color(0xFFA7F3D0)
+                        : (totalPhotos > 0 ? const Color(0xFFFDE68A) : Colors.grey.shade300),
                   ),
                 ),
                 child: Text(
-                  '$totalPhotos / 5 uploaded',
+                  hasMetMinimum
+                      ? '$totalPhotos / 5 photos'
+                      : '$totalPhotos / 3 min photos ($remainingForMin needed)',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: totalPhotos > 0 ? const Color(0xFF047857) : AppTheme.textSecondary,
+                    color: hasMetMinimum
+                        ? const Color(0xFF047857)
+                        : (totalPhotos > 0 ? const Color(0xFFB45309) : AppTheme.textSecondary),
                   ),
                 ),
               ),
@@ -925,12 +1103,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'No job photos added yet',
+                      'No job photos added yet (Minimum 3 Required)',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Tap to upload photos of repairs, installations, or completed work',
+                      'Tap to upload at least 3 photos of repairs, installations, or completed work',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                     ),
@@ -938,7 +1116,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     OutlinedButton.icon(
                       onPressed: _showJobPhotoSourceSheet,
                       icon: const Icon(LucideIcons.plus, size: 16),
-                      label: const Text('Add Job Photo(s)'),
+                      label: const Text('Add Work Photos (Min 3)'),
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -968,16 +1146,28 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.accent, width: 1.5),
+                        border: Border.all(
+                          color: hasMetMinimum ? AppTheme.accent : const Color(0xFFF59E0B),
+                          width: 1.5,
+                        ),
                       ),
-                      child: const Column(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.plusCircle, color: AppTheme.accent, size: 28),
-                          SizedBox(height: 6),
+                          Icon(
+                            LucideIcons.plusCircle,
+                            color: hasMetMinimum ? AppTheme.accent : const Color(0xFFF59E0B),
+                            size: 28,
+                          ),
+                          const SizedBox(height: 6),
                           Text(
-                            'Add Photo',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.accent),
+                            hasMetMinimum ? 'Add Photo (${5 - totalPhotos} left)' : 'Add Photo ($remainingForMin more for min)',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: hasMetMinimum ? AppTheme.accent : const Color(0xFFD97706),
+                            ),
                           ),
                         ],
                       ),
@@ -989,7 +1179,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 if (idx < _existingJobPhotoUrls.length) {
                   final url = _existingJobPhotoUrls[idx];
                   return _buildPhotoTile(
-                    label: 'Proof #${idx + 1}',
+                    label: idx < 3 ? 'Proof #${idx + 1} (Required)' : 'Proof #${idx + 1} (Optional)',
                     imageWidget: Image.network(url, fit: BoxFit.cover),
                     onDelete: () => setState(() => _existingJobPhotoUrls.removeAt(idx)),
                   );
@@ -999,12 +1189,35 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 final localIdx = idx - _existingJobPhotoUrls.length;
                 final file = _jobPhotoFiles[localIdx];
                 return _buildPhotoTile(
-                  label: 'Proof #${idx + 1}',
+                  label: idx < 3 ? 'Proof #${idx + 1} (Required)' : 'Proof #${idx + 1} (Optional)',
                   imageWidget: Image.file(file, fit: BoxFit.cover),
                   onDelete: () => setState(() => _jobPhotoFiles.removeAt(localIdx)),
                 );
               },
             ),
+
+            if (!hasMetMinimum)
+              Container(
+                margin: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.alertCircle, size: 18, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Minimum 3 photos required to continue ($remainingForMin more needed).',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 12),
             if (totalPhotos < 5)
@@ -1013,7 +1226,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 child: TextButton.icon(
                   onPressed: _showJobPhotoSourceSheet,
                   icon: const Icon(LucideIcons.plus, size: 14),
-                  label: Text('Add More Photos (${5 - totalPhotos} left)', style: const TextStyle(fontSize: 12)),
+                  label: Text(
+                    hasMetMinimum
+                        ? 'Add More Photos (${5 - totalPhotos} left)'
+                        : 'Add Photos ($remainingForMin more to reach 3 min)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
           ],
@@ -1040,25 +1258,43 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 flex: 3,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    if (totalPhotos == 0) {
+                    if (totalPhotos < 3) {
                       showDialog(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          title: const Text('No Job Photos Added'),
-                          content: const Text(
-                            'Adding at least 1 job photo showing your real work is strongly recommended to get verified by the admin team. Continue anyway?',
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Row(
+                            children: [
+                              Icon(LucideIcons.alertTriangle, color: Color(0xFFD97706)),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Minimum 3 Photos Required',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Text(
+                            'Admin verification requires at least 3 photos of your completed work to activate your service provider profile.\n\nYou have currently uploaded $totalPhotos of 3 required photos. Please upload $remainingForMin more photo${remainingForMin == 1 ? '' : 's'} to continue.',
+                            style: const TextStyle(fontSize: 13, height: 1.4),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Add Photos Now'),
+                              child: const Text('Cancel'),
                             ),
-                            ElevatedButton(
+                            ElevatedButton.icon(
                               onPressed: () {
                                 Navigator.pop(ctx);
-                                _goToStep(2);
+                                _showJobPhotoSourceSheet();
                               },
-                              child: const Text('Continue'),
+                              icon: const Icon(LucideIcons.camera, size: 16),
+                              label: const Text('Upload Photos Now'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
                             ),
                           ],
                         ),
@@ -1068,10 +1304,13 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     }
                   },
                   icon: const Icon(LucideIcons.arrowRight, size: 18),
-                  label: const Text('Next: Government ID', style: TextStyle(fontWeight: FontWeight.bold)),
+                  label: Text(
+                    hasMetMinimum ? 'Next: Government ID' : 'Upload 3 Photos ($totalPhotos/3)',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: AppTheme.primary,
+                    backgroundColor: hasMetMinimum ? AppTheme.primary : const Color(0xFFD97706),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
@@ -1305,8 +1544,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final authProvider = Provider.of<AuthProvider>(context);
     final profile = authProvider.userProfile;
     final hasGovId = _govIdFile != null || (profile?.govIdUrl != null && profile!.govIdUrl!.isNotEmpty);
-    final canSubmit = hasGovId && hasPassport && _declarationAccepted && !_isUploading;
     final totalWorkPhotos = _jobPhotoFiles.length + _existingJobPhotoUrls.length;
+    final hasMinWorkPhotos = totalWorkPhotos >= 3;
+    final canSubmit = hasGovId && hasPassport && hasMinWorkPhotos && _declarationAccepted && !_isUploading;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1357,6 +1597,34 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
           const SizedBox(height: 20),
 
+          // Warning if minimum 3 work photos missing
+          if (!hasMinWorkPhotos)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.alertTriangle, size: 20, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Minimum 3 proof of work photos required before submission (currently $totalWorkPhotos of 3).',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _goToStep(1),
+                    child: const Text('Add Photos', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                  ),
+                ],
+              ),
+            ),
+
           // Verification Summary Box
           Container(
             padding: const EdgeInsets.all(16),
@@ -1388,9 +1656,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 ),
                 const Divider(height: 14),
                 _buildSummaryRow(
-                  label: 'Proof of Work Photos',
-                  value: totalWorkPhotos > 0 ? '$totalWorkPhotos Photos Attached ✅' : '0 Photos (Recommended)',
-                  isOk: totalWorkPhotos > 0,
+                  label: 'Proof of Work Photos (Min 3)',
+                  value: hasMinWorkPhotos
+                      ? '$totalWorkPhotos Photos Attached ✅ (Min 3 Met)'
+                      : '$totalWorkPhotos Photos Attached ⚠️ (Min 3 Required)',
+                  isOk: hasMinWorkPhotos,
                 ),
                 const Divider(height: 14),
                 _buildSummaryRow(
@@ -1528,7 +1798,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   }
 
   Widget _buildStatusHeader(String status, [String? rejectionReason]) {
-    if (status == 'rejected') {
+    if (status == 'rejected' || status == 'restricted') {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

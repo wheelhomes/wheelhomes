@@ -63,6 +63,16 @@ export const RequestServices = {
     },
 
     async assignRequest(requestId: string, providerId: string): Promise<void> {
+        // Security Guard: Check that the provider exists and is approved by admin
+        const providerSnap = await getDoc(doc(db, "users", providerId));
+        if (!providerSnap.exists()) {
+            throw new Error("Provider account not found");
+        }
+        const providerData = providerSnap.data();
+        if (providerData.role === 'service_provider' && providerData.status !== 'approved') {
+            throw new Error("Provider must be verified and approved by admin before receiving assignments");
+        }
+
         // Matches Provider Dashboard logic (accepted = assigned/accepted)
         const updateData = {
             status: 'accepted',

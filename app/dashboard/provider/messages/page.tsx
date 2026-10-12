@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { db } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, getDoc, doc } from "firebase/firestore";
 import { UnifiedChat } from "@/components/chat/UnifiedChat";
@@ -17,17 +18,44 @@ interface ChatSession {
 }
 
 export default function ProviderMessagesPage() {
+    const router = useRouter();
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Fetch Current User
+    // Fetch Current User & Verify Status
     useEffect(() => {
-        const storedId = localStorage.getItem("tempUserId"); // Consistent with other pages
-        setCurrentUserId(storedId);
-    }, []);
+        const verifyProvider = async () => {
+            const storedId = localStorage.getItem("tempUserId");
+            if (!storedId) {
+                router.push("/signin");
+                return;
+            }
+            setCurrentUserId(storedId);
+
+            try {
+                const userDoc = await getDoc(doc(db, "users", storedId));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data.status !== 'approved') {
+                        if (data.status === 'pending_review' || data.status === 'pending') {
+                            router.replace("/dashboard/pending");
+                        } else if (data.status === 'rejected' || data.status === 'restricted') {
+                            router.replace("/settings/verification");
+                        } else {
+                            router.replace("/register/provider");
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Error verifying provider status in messages:", e);
+            }
+        };
+
+        verifyProvider();
+    }, [router]);
 
     // Fetch Active Jobs for Messages
     useEffect(() => {

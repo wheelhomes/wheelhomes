@@ -103,7 +103,7 @@ export default function DashboardLayout({
                         </div>
                     )}
 
-                    <Link href="/onboarding/documents" className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2">
+                    <Link href="/settings/verification" className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2">
                         Re-upload Documents
                     </Link>
                 </div>
@@ -164,6 +164,37 @@ export default function DashboardLayout({
         return null;
     }
 
+    // 5. Strict Service Provider Gating: Provider dashboard routes require status === 'approved'
+    if (pathname?.startsWith("/dashboard/provider")) {
+        if (userProfile.role !== 'service_provider') {
+            router.replace("/dashboard/user");
+            return null;
+        }
+        if (userProfile.status !== 'approved') {
+            if (userProfile.status === 'pending_review' || userProfile.status === 'pending') {
+                router.replace("/dashboard/pending");
+            } else if (userProfile.status === 'rejected' || userProfile.status === 'restricted') {
+                router.replace("/settings/verification");
+            } else {
+                router.replace("/register/provider");
+            }
+            return null;
+        }
+    }
+
+    // 6. Provider Verification Inactivity Guard: Unapproved providers cannot access active dashboard routes
+    if (userProfile.role === 'service_provider' && userProfile.status !== 'approved') {
+        if (pathname !== "/dashboard/pending") {
+            if (userProfile.status === 'pending_review' || userProfile.status === 'pending') {
+                router.replace("/dashboard/pending");
+            } else if (userProfile.status === 'rejected' || userProfile.status === 'restricted') {
+                router.replace("/settings/verification");
+            } else {
+                router.replace("/register/provider");
+            }
+            return null;
+        }
+    }
 
     return <>{children}</>;
 }

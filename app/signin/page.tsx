@@ -58,45 +58,52 @@ export default function SignInPage() {
             const role = userData.role;
 
             // 3. Status Based Routing
-            if (status === 'rejected') {
-                // Show Rejection Reason & Auto Logout
-                const reason = userData.rejectionReason || "No reason provided.";
-                setError({
-                    type: "rejected",
-                    message: reason
-                });
-                await signOut(auth); // Force logout so they can't access authorized routes
-                setIsLoading(false);
+            if (status === 'rejected' || status === 'restricted') {
+                // Route to verification settings where they can review the reason and re-upload documents
+                router.push("/settings/verification");
                 return;
             }
 
-            if (status === 'pending_review') {
+            if (status === 'pending_review' || status === 'pending') {
                 router.push("/dashboard/pending");
                 return;
             }
 
             if (status === 'unverified') {
-                router.push("/verify-email");
+                if (role === 'pending_role_selection' || !role) {
+                    router.push("/role-selection");
+                } else if (!user.emailVerified) {
+                    router.push("/verify-email");
+                } else if (role === 'service_provider') {
+                    router.push("/register/provider");
+                } else {
+                    router.push("/onboarding/profile");
+                }
                 return;
             }
 
             if (status === 'verified') {
-                // User verified email but hasn't completed registration
-                // Redirect to Provider Registration (or role selection if we had it)
-                router.push("/register/provider");
+                if (role === 'pending_role_selection' || !role) {
+                    router.push("/role-selection");
+                } else if (role === 'service_provider') {
+                    router.push("/register/provider");
+                } else {
+                    router.push("/dashboard/user");
+                }
                 return;
             }
 
             if (status === 'approved' || !status /* legacy users might not have status */) {
-                // Store simulated session data for legacy components if needed, or rely on Auth Context
-                localStorage.setItem("tempUserId", user.uid); // Keeping this for the Provider Dashboard compatibility
-                localStorage.setItem("userName", userData.fullName);
+                // Store session data for legacy components
+                localStorage.setItem("tempUserId", user.uid);
+                localStorage.setItem("userName", userData.fullName || "User");
 
                 // Role Routing
                 if (role === 'service_provider') router.push("/dashboard/provider");
                 else if (role === 'agent') router.push("/dashboard/agent");
                 else if (role === 'admin') router.push("/admin/dashboard");
                 else router.push("/dashboard/user"); // Normal user default
+                return;
             }
 
         } catch (err: any) {

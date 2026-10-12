@@ -18,6 +18,7 @@ import '../payment/payment_checkout_screen.dart';
 import '../payment/payment_history_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../verification/document_upload_screen.dart';
+import '../verification/pending_approval_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -47,16 +48,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userProfile = authProvider.userProfile;
+    final isProvider = userProfile?.role == 'service_provider';
+    final isAgent = userProfile?.role == 'agent';
+
+    // ── Each role gets its own dedicated workspace ──
+    // • Service Provider → Jobs, Messages, Profile (no property browsing)
+    // • Agent            → Listings, Messages, Profile
+    // • Client           → Explore, Requests, Profile
+    final List<Widget> tabs;
+    final List<BottomNavigationBarItem> navItems;
+    if (isProvider) {
+      tabs = const [_ProviderHubTab(), ConversationsScreen(), _ProfileTab()];
+      navItems = const [
+        BottomNavigationBarItem(icon: Icon(LucideIcons.briefcase), label: 'Jobs'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.messageSquare), label: 'Messages'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profile'),
+      ];
+    } else if (isAgent) {
+      tabs = const [_ExploreTab(), ConversationsScreen(), _ProfileTab()];
+      navItems = const [
+        BottomNavigationBarItem(icon: Icon(LucideIcons.building2), label: 'Listings'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.messageSquare), label: 'Messages'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profile'),
+      ];
+    } else {
+      tabs = const [_ExploreTab(), _ServiceRequestsTab(), _ProfileTab()];
+      navItems = const [
+        BottomNavigationBarItem(icon: Icon(LucideIcons.compass), label: 'Explore'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.clipboardList), label: 'Requests'),
+        BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profile'),
+      ];
+    }
+    final effectiveIndex = _currentIndex.clamp(0, tabs.length - 1);
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: IndexedStack(
-        index: _currentIndex,
-        children: const [
-          _ExploreTab(),
-          _ServiceRequestsTab(),
-          _ProviderHubTab(),
-          _ProfileTab(),
-        ],
+        index: effectiveIndex,
+        children: tabs,
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -64,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
           border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
         ),
         child: BottomNavigationBar(
-          currentIndex: _currentIndex,
+          currentIndex: effectiveIndex,
           onTap: (idx) => setState(() => _currentIndex = idx),
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppTheme.primary,
@@ -73,27 +104,10 @@ class _HomeScreenState extends State<HomeScreen> {
           unselectedLabelStyle: const TextStyle(fontSize: 12),
           elevation: 0,
           backgroundColor: Colors.white,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.compass),
-              label: 'Explore',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.clipboardList),
-              label: 'Requests',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.wrench),
-              label: 'Services',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(LucideIcons.user),
-              label: 'Profile',
-            ),
-          ],
+          items: navItems,
         ),
       ),
-      floatingActionButton: _currentIndex == 1
+      floatingActionButton: (!isProvider && !isAgent && effectiveIndex == 1)
           ? FloatingActionButton.extended(
               onPressed: () {
                 Navigator.push(
@@ -105,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(LucideIcons.plus, color: Colors.white),
               label: const Text('New Request', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
-          : (_currentIndex == 0 && Provider.of<AuthProvider>(context).userProfile?.role == 'agent')
+          : (isAgent && effectiveIndex == 0)
               ? FloatingActionButton.extended(
                   onPressed: () {
                     final profile = Provider.of<AuthProvider>(context, listen: false).userProfile;
@@ -136,6 +150,7 @@ class _ExploreTab extends StatelessWidget {
 
     return SafeArea(
       child: CustomScrollView(
+        key: const PageStorageKey('explore_scroll_view'),
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
@@ -152,7 +167,12 @@ class _ExploreTab extends StatelessWidget {
                         children: [
                           Text('Wheelhomes 🏡', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: AppTheme.primary)),
                           const SizedBox(height: 4),
-                          Text('Find your dream home or local service', style: Theme.of(context).textTheme.bodyMedium),
+                          Text(
+                            Provider.of<AuthProvider>(context).userProfile?.role == 'agent'
+                                ? 'Browse the market & manage your listings'
+                                : 'Find your dream home',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
                         ],
                       ),
                       Row(
@@ -229,7 +249,178 @@ class _ExploreTab extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
+
+                  // ── Prominent KYC Verification Banner (For Providers & Agents) ──
+                  Consumer<AuthProvider>(
+                    builder: (context, authProv, _) {
+                      final profile = authProv.userProfile;
+                      if (profile == null) return const SizedBox.shrink();
+                      if (profile.role != 'service_provider' && profile.role != 'agent') {
+                        return const SizedBox.shrink();
+                      }
+                      if (profile.isVerified) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final isPending = profile.isPendingReview;
+                      final isRejected = profile.isRejected;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isRejected
+                                ? [const Color(0xFFFEF2F2), const Color(0xFFFFF1F2)]
+                                : isPending
+                                    ? [const Color(0xFFEFF6FF), const Color(0xFFF0FDF4)]
+                                    : [const Color(0xFFFFFBEB), const Color(0xFFFEF3C7)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isRejected
+                                ? const Color(0xFFFECACA)
+                                : isPending
+                                    ? const Color(0xFFBFDBFE)
+                                    : const Color(0xFFFDE68A),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isRejected
+                                      ? Colors.red
+                                      : isPending
+                                          ? Colors.blue
+                                          : Colors.amber)
+                                  .withValues(alpha: 0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: (isRejected
+                                        ? const Color(0xFFEF4444)
+                                        : isPending
+                                            ? const Color(0xFF2563EB)
+                                            : const Color(0xFFD97706))
+                                    .withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                isRejected
+                                    ? LucideIcons.alertTriangle
+                                    : isPending
+                                        ? LucideIcons.clockAlert
+                                        : LucideIcons.shieldCheck,
+                                color: isRejected
+                                    ? const Color(0xFFDC2626)
+                                    : isPending
+                                        ? const Color(0xFF1D4ED8)
+                                        : const Color(0xFFB45309),
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isRejected
+                                        ? 'Verification Update Needed'
+                                        : isPending
+                                            ? 'Verification in Review'
+                                            : 'Complete Your ${profile.role == 'agent' ? "Agent" : "Provider"} Setup',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: isRejected
+                                          ? const Color(0xFF991B1B)
+                                          : isPending
+                                              ? const Color(0xFF1E40AF)
+                                              : const Color(0xFF92400E),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isRejected
+                                        ? (profile.rejectionReason != null && profile.rejectionReason!.isNotEmpty
+                                            ? profile.rejectionReason!
+                                            : 'Your documents require updates to verify your account.')
+                                        : isPending
+                                            ? 'Your documents have been submitted and are under review by compliance.'
+                                            : 'Submit your trade details & ID to start receiving client jobs and payouts.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isRejected
+                                          ? const Color(0xFFB91C1C)
+                                          : isPending
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFFB45309),
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => isPending
+                                              ? const PendingApprovalScreen()
+                                              : const DocumentUploadScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          isRejected
+                                              ? 'Update Documents'
+                                              : isPending
+                                                  ? 'View Status'
+                                                  : 'Resume Setup (4 Steps)',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12.5,
+                                            color: isRejected
+                                                ? const Color(0xFFDC2626)
+                                                : isPending
+                                                    ? const Color(0xFF1D4ED8)
+                                                    : const Color(0xFFD97706),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          LucideIcons.arrowRight,
+                                          size: 14,
+                                          color: isRejected
+                                              ? const Color(0xFFDC2626)
+                                              : isPending
+                                                  ? const Color(0xFF1D4ED8)
+                                                  : const Color(0xFFD97706),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
 
                   // Search Input
                   TextField(
@@ -277,10 +468,60 @@ class _ExploreTab extends StatelessWidget {
           ),
 
           // Property Grid / List
-          if (propertyProvider.properties.isEmpty)
+          if (propertyProvider.isLoading && propertyProvider.properties.isEmpty)
             const SliverFillRemaining(
+              hasScrollBody: false,
               child: Center(
-                child: Text('No properties found matching criteria.'),
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            )
+          else if (propertyProvider.properties.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(LucideIcons.home, size: 40, color: AppTheme.primary),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        propertyProvider.hasActiveFilters ? 'No matching properties' : 'No properties listed yet',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        propertyProvider.hasActiveFilters
+                            ? 'No properties match your current search or category filter.'
+                            : 'Verified real estate listings published by registered agents will appear here.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                      ),
+                      if (propertyProvider.hasActiveFilters) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            propertyProvider.setCategory('All');
+                            propertyProvider.setSearchQuery('');
+                          },
+                          icon: const Icon(LucideIcons.rotateCcw, size: 16),
+                          label: const Text('Reset Filters'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             )
           else
@@ -474,8 +715,8 @@ class _ServiceRequestsTab extends StatelessWidget {
                           Icon(LucideIcons.clipboardCheck, size: 48, color: Colors.grey[400]),
                           const SizedBox(height: 12),
                           const Text('No service requests yet.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 4),
-                          const Text('Tap "New Request" below to get started.', style: TextStyle(color: AppTheme.textSecondary)),
+                          if (Provider.of<AuthProvider>(context, listen: false).userProfile?.role != 'service_provider')
+                            const Text('Tap "New Request" below to get started.', style: TextStyle(color: AppTheme.textSecondary)),
                         ],
                       ),
                     )
@@ -801,9 +1042,9 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Title & Subtitle
-            Text('Provider Job Hub 💼', style: Theme.of(context).textTheme.headlineMedium),
+            Text('Job Hub 💼', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 4),
-            Text('Browse client job requests or manage your active dispatches.', style: Theme.of(context).textTheme.bodyMedium),
+            Text('Find new client jobs and manage your active work.', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
 
             // Metrics & Verification Card
@@ -836,9 +1077,29 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${userProfile?.fullName ?? "Service Provider"} (${userProfile?.status.toUpperCase() ?? "ACTIVE"})',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                userProfile?.fullName ?? 'Service Provider',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            if (userProfile?.isVerified == true)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'VERIFIED',
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -858,25 +1119,33 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: userProfile.isPendingReview
-                      ? const Color(0xFFEFF6FF)
-                      : const Color(0xFFFFFBEB),
+                  color: userProfile.isRejected
+                      ? const Color(0xFFFEF2F2)
+                      : userProfile.isPendingReview
+                          ? const Color(0xFFEFF6FF)
+                          : const Color(0xFFFFFBEB),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: userProfile.isPendingReview
-                        ? const Color(0xFFBFDBFE)
-                        : const Color(0xFFFDE68A),
+                    color: userProfile.isRejected
+                        ? const Color(0xFFFECACA)
+                        : userProfile.isPendingReview
+                            ? const Color(0xFFBFDBFE)
+                            : const Color(0xFFFDE68A),
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      userProfile.isPendingReview
-                          ? LucideIcons.clock
-                          : LucideIcons.shieldAlert,
-                      color: userProfile.isPendingReview
-                          ? const Color(0xFF1D4ED8)
-                          : const Color(0xFFB45309),
+                      userProfile.isRejected
+                          ? LucideIcons.alertTriangle
+                          : userProfile.isPendingReview
+                              ? LucideIcons.clock
+                              : LucideIcons.shieldAlert,
+                      color: userProfile.isRejected
+                          ? const Color(0xFFDC2626)
+                          : userProfile.isPendingReview
+                              ? const Color(0xFF1D4ED8)
+                              : const Color(0xFFB45309),
                       size: 22,
                     ),
                     const SizedBox(width: 12),
@@ -885,27 +1154,37 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            userProfile.isPendingReview
-                                ? 'KYC In Review'
-                                : 'Account Not Verified',
+                            userProfile.isRejected
+                                ? 'Verification Update Needed'
+                                : userProfile.isPendingReview
+                                    ? 'KYC In Review'
+                                    : 'Account Not Verified',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: userProfile.isPendingReview
-                                  ? const Color(0xFF1E40AF)
-                                  : const Color(0xFF92400E),
+                              color: userProfile.isRejected
+                                  ? const Color(0xFF991B1B)
+                                  : userProfile.isPendingReview
+                                      ? const Color(0xFF1E40AF)
+                                      : const Color(0xFF92400E),
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            userProfile.isPendingReview
-                                ? 'Documents submitted. Awaiting compliance review.'
-                                : 'Upload your Government ID & selfie to claim jobs.',
+                            userProfile.isRejected
+                                ? (userProfile.rejectionReason != null && userProfile.rejectionReason!.isNotEmpty
+                                    ? userProfile.rejectionReason!
+                                    : 'Compliance requested updates to your documents.')
+                                : userProfile.isPendingReview
+                                    ? 'Documents submitted. Awaiting compliance review.'
+                                    : 'Upload your Government ID & selfie to claim jobs.',
                             style: TextStyle(
                               fontSize: 11,
-                              color: userProfile.isPendingReview
-                                  ? const Color(0xFF2563EB)
-                                  : const Color(0xFFB45309),
+                              color: userProfile.isRejected
+                                  ? const Color(0xFFB91C1C)
+                                  : userProfile.isPendingReview
+                                      ? const Color(0xFF2563EB)
+                                      : const Color(0xFFB45309),
                             ),
                           ),
                         ],
@@ -915,7 +1194,11 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => userProfile.isPendingReview
+                                ? const PendingApprovalScreen()
+                                : const DocumentUploadScreen(),
+                          ),
                         );
                       },
                       style: TextButton.styleFrom(
@@ -923,13 +1206,19 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                         visualDensity: VisualDensity.compact,
                       ),
                       child: Text(
-                        userProfile.isPendingReview ? 'Status' : 'Verify Now',
+                        userProfile.isRejected
+                            ? 'Update Now'
+                            : userProfile.isPendingReview
+                                ? 'Status'
+                                : 'Verify Now',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
-                          color: userProfile.isPendingReview
-                              ? const Color(0xFF1D4ED8)
-                              : const Color(0xFFB45309),
+                          color: userProfile.isRejected
+                              ? const Color(0xFFDC2626)
+                              : userProfile.isPendingReview
+                                  ? const Color(0xFF1D4ED8)
+                                  : const Color(0xFFB45309),
                         ),
                       ),
                     ),
@@ -1159,8 +1448,8 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                                           ? null
                                           : () async {
                                               if (user == null) return;
-                                              final userProfile = Provider.of<AuthProvider>(context, listen: false).userProfile;
-                                              if (userProfile != null && !userProfile.isVerified) {
+                                              final profile = Provider.of<AuthProvider>(context, listen: false).userProfile;
+                                              if (profile == null || !profile.isVerified || profile.status != 'approved') {
                                                 _showVerificationGatingSheet(context, role: 'service_provider');
                                                 return;
                                               }
@@ -1179,6 +1468,7 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                                               if (confirmed != true) return;
                                               if (!mounted) return;
 
+                                              final messenger = ScaffoldMessenger.of(context);
                                               final success = await requestProvider.acceptJob(
                                                 jobId: job.id,
                                                 providerId: user.uid,
@@ -1186,7 +1476,7 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                                               if (!mounted) return;
 
                                               if (success) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                messenger.showSnackBar(
                                                   const SnackBar(
                                                     content: Text('Job accepted successfully! Moved to My Jobs. 🎉'),
                                                     backgroundColor: AppTheme.accent,
@@ -1195,9 +1485,13 @@ class _ProviderHubTabState extends State<_ProviderHubTab> {
                                                 setState(() => _selectedSubTab = 1);
                                               }
                                             },
-                                      icon: const Icon(LucideIcons.checkCircle2, size: 16),
-                                      label: const Text('Accept Job'),
+                                      icon: Icon(
+                                        (userProfile?.isVerified == true) ? LucideIcons.checkCircle2 : LucideIcons.lock,
+                                        size: 16,
+                                      ),
+                                      label: Text((userProfile?.isVerified == true) ? 'Accept Job' : 'Verify to Accept'),
                                       style: ElevatedButton.styleFrom(
+                                        backgroundColor: (userProfile?.isVerified == true) ? AppTheme.primary : const Color(0xFF64748B),
                                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
@@ -1378,7 +1672,11 @@ class _ProfileTab extends StatelessWidget {
                   Text(userProfile?.email ?? '', style: const TextStyle(color: AppTheme.textSecondary)),
                   const SizedBox(height: 12),
                   Chip(
-                    label: Text(userProfile?.role.toUpperCase() ?? 'CLIENT'),
+                    label: Text(switch (userProfile?.role) {
+                      'service_provider' => 'SERVICE PROVIDER',
+                      'agent' => 'REAL ESTATE AGENT',
+                      _ => 'CLIENT',
+                    }),
                     backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
                     labelStyle: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11),
                   ),
@@ -1437,7 +1735,8 @@ class _ProfileTab extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Payments & Escrow Tile
+            // Payments & Escrow Tile (clients pay, providers get paid)
+            if (userProfile?.role != 'agent') ...[
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1454,8 +1753,16 @@ class _ProfileTab extends StatelessWidget {
                   ),
                   child: const Icon(LucideIcons.receipt, color: AppTheme.primary, size: 20),
                 ),
-                title: const Text('Payment History & Escrow', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('View receipts, escrow hold & release logs', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                title: Text(
+                  userProfile?.role == 'service_provider' ? 'Earnings & Payouts' : 'Payment History & Escrow',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  userProfile?.role == 'service_provider'
+                      ? 'Track escrow releases for completed jobs'
+                      : 'View receipts, escrow hold & release logs',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
                 trailing: const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textSecondary),
                 onTap: () {
                   Navigator.push(
@@ -1466,8 +1773,10 @@ class _ProfileTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            ],
 
-            // Identity Verification Tile
+            // Identity Verification Tile (providers & agents only)
+            if (userProfile?.role == 'service_provider' || userProfile?.role == 'agent') ...[
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1545,14 +1854,20 @@ class _ProfileTab extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => userProfile?.isPendingReview == true
+                        ? const PendingApprovalScreen()
+                        : const DocumentUploadScreen(),
+                  ),
                 );
               },
             ),
           ),
           const SizedBox(height: 12),
+          ],
 
-          // Escrow Protection Info Card
+          // Escrow Protection Info Card (client & provider perspectives)
+          if (userProfile?.role != 'agent')
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1560,22 +1875,26 @@ class _ProfileTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(LucideIcons.shieldCheck, color: Color(0xFF047857), size: 28),
-                SizedBox(width: 14),
+                const Icon(LucideIcons.shieldCheck, color: Color(0xFF047857), size: 28),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Escrow Buyer Protection Active',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF065F46)),
+                        userProfile?.role == 'service_provider'
+                            ? 'Guaranteed Escrow Payouts'
+                            : 'Escrow Buyer Protection Active',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF065F46)),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Your funds are protected. Payments are only released after you confirm satisfaction.',
-                        style: TextStyle(fontSize: 11, color: Color(0xFF047857), height: 1.3),
+                        userProfile?.role == 'service_provider'
+                            ? 'Clients fund jobs upfront. Payment is released to you once the job is confirmed complete.'
+                            : 'Your funds are protected. Payments are only released after you confirm satisfaction.',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF047857), height: 1.3),
                       ),
                     ],
                   ),
@@ -1604,6 +1923,9 @@ class _ProfileTab extends StatelessWidget {
 }
 
 void _showVerificationGatingSheet(BuildContext context, {required String role}) {
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final userProfile = authProvider.userProfile;
+
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -1647,7 +1969,11 @@ void _showVerificationGatingSheet(BuildContext context, {required String role}) 
                   Navigator.pop(ctx);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => userProfile?.isPendingReview == true
+                          ? const PendingApprovalScreen()
+                          : const DocumentUploadScreen(),
+                    ),
                   );
                 },
                 icon: const Icon(LucideIcons.uploadCloud, size: 18),

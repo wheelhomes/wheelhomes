@@ -84,7 +84,10 @@ export function RequestWizard({ isOpen, onClose, initialCategory, initialDescrip
 
                         const snap = await getDocs(q);
                         if (!snap.empty) {
-                            const fetched = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Provider));
+                            // Security Guard: Auto-assign only matches fully approved providers
+                            const fetched = snap.docs
+                                .map((d: any) => ({ id: d.id, ...d.data() } as Provider))
+                                .filter((p: any) => p.status === 'approved');
                             // Client-side sort to avoid index issues
                             fetched.sort((a: Provider, b: Provider) => (b.rating || 0) - (a.rating || 0));
 

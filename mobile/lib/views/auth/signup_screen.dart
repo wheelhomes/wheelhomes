@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../core/theme.dart';
+import '../../core/app_snackbar.dart';
 import '../../providers/auth_provider.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -88,27 +88,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _submit() async {
+    FocusScope.of(context).unfocus();
     if (_formKey.currentState!.validate()) {
       final pass = _passwordController.text;
       if (pass.length < 8 ||
           !RegExp(r'[A-Z]').hasMatch(pass) ||
           !RegExp(r'[0-9]').hasMatch(pass) ||
           !RegExp(r'[^A-Za-z0-9]').hasMatch(pass)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password must meet format: 8+ chars, 1 uppercase, 1 number, 1 symbol (e.g. 1@Asdmddmdn)'),
-            backgroundColor: AppTheme.error,
-          ),
+        AppSnackBar.showError(
+          context,
+          'Password must have at least 8 characters, 1 uppercase letter, 1 number, and 1 special symbol.',
+          title: 'Weak Password',
         );
         return;
       }
 
       if (_passwordController.text != _confirmPasswordController.text) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Passwords do not match'),
-            backgroundColor: AppTheme.error,
-          ),
+        AppSnackBar.showError(
+          context,
+          'Passwords do not match. Please ensure both passwords match.',
+          title: 'Password Mismatch',
         );
         return;
       }
@@ -123,12 +122,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (success) {
         if (mounted) Navigator.pop(context);
-      } else if (mounted && authProvider.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(authProvider.errorMessage!),
-            backgroundColor: AppTheme.error,
-          ),
+      } else if (mounted) {
+        AppSnackBar.showError(
+          context,
+          authProvider.errorMessage ?? 'Failed to create account. Please verify your details.',
+          title: 'Registration Error',
         );
       }
     }

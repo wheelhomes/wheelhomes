@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -79,46 +80,77 @@ class AuthService {
 
 
 
+  // Real-time User Profile Stream
+  Stream<UserProfile?> userProfileStream(String uid) {
+    return _firestore.collection('users').doc(uid).snapshots().map((doc) {
+      if (doc.exists && doc.data() != null) {
+        return UserProfile.fromMap(doc.data()!, doc.id);
+      }
+      return null;
+    });
+  }
+
   // Upload and Submit KYC Identity Verification Documents + Trade & Job Photos
   Future<void> submitKycDocuments({
     required String uid,
     required String idType,
-    required File govIdFile,
-    required File passportFile,
+    File? govIdFile,
+    File? passportFile,
+    String? existingGovIdUrl,
+    String? existingPassportUrl,
     List<File> jobPhotoFiles = const [],
+    List<String> existingJobPhotoUrls = const [],
     String? bio,
     String? serviceCategory,
   }) async {
-    // 1. Parallel Cloud Upload (All files upload concurrently in < 3 seconds)
-    final govIdFuture = _storageService.uploadLocalFile(
-      file: govIdFile,
-      storagePath: 'provider_docs/$uid/gov_id.jpg',
-      folder: 'wheelhomes/provider_docs',
-    );
-    final passportFuture = _storageService.uploadLocalFile(
-      file: passportFile,
-      storagePath: 'provider_docs/$uid/passport.jpg',
-      folder: 'wheelhomes/provider_docs',
-    );
+    // 1. Concurrently upload new files or preserve existing valid URLs
+    Future<String> resolveGovId() async {
+      if (govIdFile != null) {
+        return await _storageService.uploadLocalFile(
+          file: govIdFile,
+          storagePath: 'provider_docs/$uid/gov_id.jpg',
+          folder: 'wheelhomes/provider_docs',
+        );
+      }
+      if (existingGovIdUrl != null && existingGovIdUrl.isNotEmpty) {
+        return existingGovIdUrl;
+      }
+      throw Exception('Government ID document is required.');
+    }
+
+    Future<String> resolvePassport() async {
+      if (passportFile != null) {
+        return await _storageService.uploadLocalFile(
+          file: passportFile,
+          storagePath: 'provider_docs/$uid/passport.jpg',
+          folder: 'wheelhomes/provider_docs',
+        );
+      }
+      if (existingPassportUrl != null && existingPassportUrl.isNotEmpty) {
+        return existingPassportUrl;
+      }
+      throw Exception('Passport photograph is required.');
+    }
 
     final jobFutures = <Future<String>>[];
     for (int i = 0; i < jobPhotoFiles.length; i++) {
       jobFutures.add(_storageService.uploadLocalFile(
         file: jobPhotoFiles[i],
-        storagePath: 'provider_docs/$uid/job_photos/proof_$i.jpg',
+        storagePath: 'provider_docs/$uid/job_photos/proof_${DateTime.now().millisecondsSinceEpoch}_$i.jpg',
         folder: 'wheelhomes/job_photos',
       ));
     }
 
     final results = await Future.wait([
-      govIdFuture,
-      passportFuture,
+      resolveGovId(),
+      resolvePassport(),
       ...jobFutures,
     ]);
 
     final govIdUrl = results[0];
     final passportUrl = results[1];
-    final jobPhotoUrls = results.sublist(2);
+    final newJobPhotoUrls = results.sublist(2);
+    final combinedJobPhotos = [...existingJobPhotoUrls, ...newJobPhotoUrls];
 
     final now = DateTime.now().toIso8601String();
     final cleanCategory = (serviceCategory != null && serviceCategory.trim().isNotEmpty)
@@ -143,25 +175,27 @@ class AuthService {
         'mimeType': 'image/jpeg',
       });
 
-      if (jobPhotoUrls.isNotEmpty) {
+      if (combinedJobPhotos.isNotEmpty) {
         await _firestore.collection('users').doc(uid).collection('documents').doc('jobPhotos').set({
-          'photos': jobPhotoUrls,
-          'count': jobPhotoUrls.length,
+          'photos': combinedJobPhotos,
+          'count': combinedJobPhotos.length,
           'uploadedAt': now,
         });
       }
     } catch (e) {
-      print('[AuthService] Documents subcollection notice: $e');
+      debugPrint('[AuthService] Documents subcollection notice: $e');
     }
 
     // 3. Update main User Profile (uses set with merge: true to guarantee no NOT_FOUND error)
     await _firestore.collection('users').doc(uid).set({
       'status': 'pending_review',
+      'rejectionReason': null,
+      'rejectedDocs': [],
       'bio': cleanBio,
       'description': cleanBio,
       'serviceCategory': cleanCategory,
       'services': [cleanCategory],
-      'jobPhotos': jobPhotoUrls,
+      'jobPhotos': combinedJobPhotos,
       'govIdUrl': govIdUrl,
       'passportUrl': passportUrl,
       'kycSubmittedAt': now,
@@ -169,7 +203,7 @@ class AuthService {
         'idType': idType,
         'govIdUrl': govIdUrl,
         'passportUrl': passportUrl,
-        'jobPhotos': jobPhotoUrls,
+        'jobPhotos': combinedJobPhotos,
         'bio': cleanBio,
         'description': cleanBio,
         'serviceCategory': cleanCategory,
@@ -221,7 +255,7 @@ class AuthService {
         );
       }
     } catch (e) {
-      print('[AuthService] ⚠️ Could not dispatch pending review email: $e');
+      debugPrint('[AuthService] ⚠️ Could not dispatch pending review email: $e');
     }
   }
 

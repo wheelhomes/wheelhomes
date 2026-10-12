@@ -54,7 +54,10 @@ export function ProviderSelectionList({ serviceType, selectedIds, onSelectionCha
                 );
 
                 const snapshot = await getDocs(q);
-                const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+                // Security Guard: Providers must be approved by admin before appearing in client selection
+                const fetched = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() } as any))
+                    .filter(p => p.status === 'approved');
 
                 if (fetched.length > 0) {
                     setProviders(fetched);
@@ -62,7 +65,9 @@ export function ProviderSelectionList({ serviceType, selectedIds, onSelectionCha
                     // Fallback to client-side filter for broad matching if index is missing
                     const qAll = query(collection(db, "users"), where("role", "==", "service_provider"), limit(50));
                     const snapAll = await getDocs(qAll);
-                    const allProviders = snapAll.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                    const allProviders = snapAll.docs
+                        .map(d => ({ id: d.id, ...d.data() } as any))
+                        .filter(p => p.status === 'approved');
 
                     const filtered = allProviders.filter(p =>
                         p.services?.some((s: string) => searchTerms.some(term =>
@@ -80,7 +85,9 @@ export function ProviderSelectionList({ serviceType, selectedIds, onSelectionCha
                 try {
                     const qAll = query(collection(db, "users"), where("role", "==", "service_provider"), limit(20));
                     const snapAll = await getDocs(qAll);
-                    const all = snapAll.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                    const all = snapAll.docs
+                        .map(d => ({ id: d.id, ...d.data() } as any))
+                        .filter(p => p.status === 'approved');
                     setProviders(all.filter(p => JSON.stringify(p).toLowerCase().includes(serviceType.toLowerCase())));
                 } catch (e) {
                     console.error("Even fallback failed", e);

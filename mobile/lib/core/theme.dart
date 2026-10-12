@@ -100,6 +100,13 @@ class AppTheme {
           borderSide: const BorderSide(color: error),
         ),
       ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E293B),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 13.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
     );
   }
 }

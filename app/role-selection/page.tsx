@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { auth, db } from "../../lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { User, Briefcase, ArrowRight } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -10,13 +10,39 @@ export default function RoleSelectionPage() {
     const router = useRouter();
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Ensure user is logged in
+    // Ensure user is logged in and guard against overwriting existing roles
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (!user) router.push("/signin");
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                router.push("/signin");
+                return;
+            }
+            try {
+                const snap = await getDoc(doc(db, "users", user.uid));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.role && data.role !== 'pending_role_selection') {
+                        if (data.status === 'approved') {
+                            router.push(data.role === 'service_provider' ? "/dashboard/provider" : "/dashboard/user");
+                            return;
+                        } else if (data.status === 'pending_review' || data.status === 'pending') {
+                            router.push("/dashboard/pending");
+                            return;
+                        } else if (data.status === 'rejected' || data.status === 'restricted') {
+                            router.push("/settings/verification");
+                            return;
+                        } else if (data.role === 'service_provider') {
+                            router.push("/register/provider");
+                            return;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Role check error:", err);
+            }
         });
         return () => unsubscribe();
-    }, []);
+    }, [router]);
 
     const handleRoleSelect = async (role: 'user' | 'service_provider') => {
         const user = auth.currentUser;
@@ -24,12 +50,15 @@ export default function RoleSelectionPage() {
 
         setIsProcessing(true);
         try {
+            const snap = await getDoc(doc(db, "users", user.uid));
+            const existingData = snap.exists() ? snap.data() : {};
+            const preserveStatus = existingData.status === 'pending_review' || existingData.status === 'approved';
+
             // Update Role in Firestore
             await updateDoc(doc(db, "users", user.uid), {
                 role: role,
-                status: 'unverified' // Set to unverified initially, will update to pending_review after docs
+                ...(preserveStatus ? {} : { status: 'unverified' })
             });
-
 
             // Redirect logic
             if (role === 'service_provider') {

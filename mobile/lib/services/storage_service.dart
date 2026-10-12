@@ -21,7 +21,7 @@ class StorageService {
       final ref = FirebaseStorage.instance.ref().child(storagePath);
       final metadata = SettableMetadata(contentType: 'image/jpeg');
       final uploadTask = ref.putFile(file, metadata);
-      final snapshot = await uploadTask.timeout(const Duration(seconds: 8));
+      final snapshot = await uploadTask.timeout(const Duration(seconds: 15));
       final downloadUrl = await snapshot.ref.getDownloadURL();
       if (downloadUrl.isNotEmpty) {
         debugPrint('[StorageService] ✅ Uploaded to Firebase Storage: $storagePath');
@@ -31,7 +31,7 @@ class StorageService {
       debugPrint('[StorageService] ⚠️ Firebase Storage notice: $e');
     }
 
-    // 2. Secondary: Cloudinary (strict 4-second timeout to prevent network hang)
+    // 2. Secondary: Cloudinary
     try {
       final uri = Uri.parse(CloudinaryConfig.uploadUrl);
       final request = http.MultipartRequest('POST', uri);
@@ -47,8 +47,8 @@ class StorageService {
       );
       request.files.add(multipartFile);
 
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 4));
-      final response = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 4));
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      final response = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -62,19 +62,18 @@ class StorageService {
       debugPrint('[StorageService] ⚠️ Cloudinary notice: $e');
     }
 
-    // 3. Fallback: Base64 data URL (loads instantly in browser & mobile)
+    // 3. Fallback: Compact Base64 data URL (< 300KB to safely respect Firestore 1MB limits)
     try {
       final bytes = await file.readAsBytes();
-      if (bytes.length < 800 * 1024) {
+      if (bytes.length < 300 * 1024) {
         final base64Str = base64Encode(bytes);
         debugPrint('[StorageService] ℹ️ Using Base64 Data URL fallback for $storagePath');
         return 'data:image/jpeg;base64,$base64Str';
       }
     } catch (_) {}
 
-    // 4. Default high-res fallback
-    debugPrint('[StorageService] ℹ️ Using standard fallback image');
-    return 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&auto=format&fit=crop';
+    // 4. Do not return mock or random stock photos for KYC identity documents
+    throw Exception('Failed to upload image. Please check your internet connection and try again.');
   }
 
   /// Uploads a single XFile to Cloudinary with timeout

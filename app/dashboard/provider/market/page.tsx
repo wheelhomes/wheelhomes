@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Search, Briefcase, MapPin, Clock, Filter, CheckCircle, ArrowRight } from "lucide-react";
 import { db } from "../../../../lib/firebase";
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { JobRequest } from "../../../../components/dashboard/provider/types";
 
@@ -15,13 +15,35 @@ export default function MarketPage() {
     const [filterCategory, setFilterCategory] = useState("all");
 
     useEffect(() => {
-        const storedId = localStorage.getItem("tempUserId");
-        if (!storedId) {
-            router.push("/signin");
-        } else {
+        const verifyProvider = async () => {
+            const storedId = localStorage.getItem("tempUserId");
+            if (!storedId) {
+                router.push("/signin");
+                return;
+            }
             setProviderId(storedId);
-        }
-    }, []);
+
+            try {
+                const userDoc = await getDoc(doc(db, "users", storedId));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data.status !== 'approved') {
+                        if (data.status === 'pending_review' || data.status === 'pending') {
+                            router.replace("/dashboard/pending");
+                        } else if (data.status === 'rejected' || data.status === 'restricted') {
+                            router.replace("/settings/verification");
+                        } else {
+                            router.replace("/register/provider");
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Error verifying provider status in market:", e);
+            }
+        };
+
+        verifyProvider();
+    }, [router]);
 
     useEffect(() => {
         // Query for OPEN jobs
@@ -53,10 +75,17 @@ export default function MarketPage() {
 
     const handleAcceptJob = async (job: JobRequest) => {
         if (!providerId) return;
-        const confirm = window.confirm(`Are you sure you want to accept this ${job.serviceType} job?`);
-        if (!confirm) return;
 
         try {
+            const userDoc = await getDoc(doc(db, "users", providerId));
+            if (!userDoc.exists() || userDoc.data().status !== 'approved') {
+                alert("Your service provider account must be approved by an administrator before accepting jobs.");
+                return;
+            }
+
+            const confirm = window.confirm(`Are you sure you want to accept this ${job.serviceType} job?`);
+            if (!confirm) return;
+
             const jobRef = doc(db, "job_requests", job.id);
             await updateDoc(jobRef, {
                 status: "accepted",
@@ -64,7 +93,6 @@ export default function MarketPage() {
                 acceptedAt: new Date().toISOString()
             });
             // Job will vanish from list due to realtime listener
-            // Ideally show success toast
             router.push(`/dashboard/provider/jobs`); // Redirect to My Jobs
         } catch (error) {
             console.error("Error accepting job:", error);

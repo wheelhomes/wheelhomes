@@ -58,9 +58,6 @@ class WheelhomesApp extends StatelessWidget {
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
-  /// Roles that require KYC verification before accessing the app.
-  static const _kycRequiredRoles = {'service_provider', 'agent'};
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -77,32 +74,26 @@ class AuthWrapper extends StatelessWidget {
       return const RoleSelectionScreen();
     }
 
-    // ── Step 3: For roles that require KYC (service_provider, agent),
-    //    gate access based on their verification status.
-    if (_kycRequiredRoles.contains(profile.role)) {
-      switch (profile.status) {
-        case 'approved':
-        case 'verified':
-          // ✅ Fully verified — allow into the main app
-          break;
-
-        case 'pending_review':
-          // ⏳ Documents submitted, awaiting admin review
-          return const PendingApprovalScreen();
-
-        case 'rejected':
-        case 'restricted':
-          // ❌ Documents rejected — need to re-upload
-          return const DocumentUploadScreen();
-
-        case 'unverified':
-        default:
-          // 🛡️ Haven't submitted documents yet — must upload KYC
-          return const DocumentUploadScreen();
+    // ── Step 3: Service Provider Verification Gating ──
+    // If a service provider's KYC application was rejected by the admin or is
+    // pending review, route them directly to PendingApprovalScreen so they can see
+    // the status, review the admin's rejection reason, and update their documents.
+    if (profile.role == 'service_provider') {
+      if (profile.isRejected || profile.isPendingReview) {
+        return const PendingApprovalScreen();
+      } else if (!profile.isVerified) {
+        return const DocumentUploadScreen();
       }
     }
 
-    // ── Step 4: All checks passed → Home Screen
+    // ── Step 4: Agent Verification Gating ──
+    if (profile.role == 'agent') {
+      if (profile.isRejected || profile.isPendingReview) {
+        return const PendingApprovalScreen();
+      }
+    }
+
+    // ── Step 5: Approved Users, Agents & Clients → Home Screen ──
     return const HomeScreen();
   }
 }

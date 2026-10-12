@@ -6,6 +6,7 @@ import { auth, db } from "../../../lib/firebase";
 import { doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
 import { Shield, Upload, FileText, Camera, CheckCircle, AlertCircle, X, ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { compressImageToBase64 } from "../../../lib/image-utils";
 import { sendPendingReviewEmailAction } from "@/app/actions/email";
 
 interface DocState {
@@ -37,9 +38,9 @@ export default function DocumentVerificationPage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Size check (max 2MB for Base64 sanity)
-        if (file.size > 2 * 1024 * 1024) {
-            alert("File is too large. Max 2MB allowed.");
+        // Size check (max 10MB before compression)
+        if (file.size > 10 * 1024 * 1024) {
+            alert("File is too large. Max 10MB allowed.");
             return;
         }
 
@@ -48,15 +49,6 @@ export default function DocumentVerificationPage() {
 
         if (type === 'govId') setGovId(newState);
         else setPassport(newState);
-    };
-
-    const convertToBase64 = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = error => reject(error);
-        });
     };
 
     const handleSubmit = async () => {
@@ -74,46 +66,56 @@ export default function DocumentVerificationPage() {
             const user = auth.currentUser;
             if (!user) return;
 
-            // Convert to Base64
-            const govIdBase64 = await convertToBase64(govId.file);
-            const passportBase64 = await convertToBase64(passport.file);
+            // Compress to Base64 (reduces to <100KB, preventing Firestore document size errors)
+            const govIdBase64 = await compressImageToBase64(govId.file);
+            const passportBase64 = await compressImageToBase64(passport.file);
 
-            // Update Firestore
-            // Write to Subcollections (to bypass 1MB limit on main doc)
+            // Fetch existing data so we don't wipe user's profile details
+            const userDocSnap = await getDoc(doc(db, "users", user.uid));
+            const existingData = userDocSnap.exists() ? userDocSnap.data() : {};
+            const existingAppData = existingData.applicationData || {};
+
+            // Write to Subcollections
             await setDoc(doc(db, "users", user.uid, "documents", "govId"), {
                 data: govIdBase64,
-                mimeType: govId.file.type,
+                mimeType: "image/jpeg",
                 type: 'govId',
                 uploadedAt: new Date().toISOString()
             });
 
             await setDoc(doc(db, "users", user.uid, "documents", "passport"), {
                 data: passportBase64,
-                mimeType: passport.file.type,
+                mimeType: "image/jpeg",
                 type: 'passport',
                 uploadedAt: new Date().toISOString()
             });
 
-            // Update Main User Doc (Metadata only)
+            // Update Main User Doc (merge with existing profile data)
             await updateDoc(doc(db, "users", user.uid), {
+                status: 'pending_review',
+                rejectionReason: null,
+                rejectedDocs: [],
                 applicationData: {
+                    ...existingAppData,
+                    govIdUrl: govIdBase64,
+                    passportUrl: passportBase64,
                     submittedAt: new Date().toISOString(),
-                    hasDocuments: true // Flag for admin to know to fetch subcollection
-                },
-                status: 'pending_review'
+                    hasDocuments: true
+                }
             });
 
-            // Dispatch pending review confirmation email to user
+            // Dispatch pending review confirmation email with actual name
             if (user.email) {
-                sendPendingReviewEmailAction(user.email, user.displayName || 'Service Provider')
+                const applicantName = existingData.fullName || user.displayName || 'Service Provider';
+                sendPendingReviewEmailAction(user.email, applicantName)
                     .catch(err => console.warn('[Onboarding Docs] Notice: Pending review email dispatch:', err));
             }
 
             router.push("/dashboard/pending");
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Upload failed", error);
-            alert("Upload failed. Please try again.");
+            alert("Upload failed: " + (error?.message || "Please try again."));
             setIsSubmitting(false);
         }
     };

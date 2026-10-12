@@ -22,6 +22,14 @@ service cloud.firestore {
       );
     }
     
+    // Check if user is an approved service provider
+    function isApprovedProvider() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'service_provider' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
     // Basic PII Check (Best effort regex-like patterns)
     // Firestore rules don't support full Regex, so we check for common indicators
     // This is NOT perfect, client-side validation is the primary UX barrier.
@@ -100,11 +108,11 @@ service cloud.firestore {
       // Create: User must be creator
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
 
-      // Update: Client, Assigned Provider, Provider claiming job, or Admin
+      // Update: Client, Assigned Provider, Approved Provider claiming job, or Admin
       allow update: if isSignedIn() && (
         resource.data.userId == request.auth.uid || 
         resource.data.providerId == request.auth.uid ||
-        resource.data.status == 'pending' ||
+        (resource.data.status == 'pending' && isApprovedProvider()) ||
         isAdmin()
       );
     }
@@ -114,12 +122,13 @@ service cloud.firestore {
       // Read: 
       // 1. Owner (Client)
       // 2. Assigned Provider
-      // 3. Pending requests (Marketplace - open to all auth users)
+      // 3. Pending/Open requests (Marketplace - open to all auth users)
       // 4. Admins
       allow read: if isSignedIn() && (
         resource.data.clientId == request.auth.uid || 
         resource.data.providerId == request.auth.uid || 
         resource.data.status == 'pending' ||
+        resource.data.status == 'open' ||
         (resource.data.invitedProviderIds is list && request.auth.uid in resource.data.invitedProviderIds) ||
         isAdmin()
       );
@@ -127,10 +136,11 @@ service cloud.firestore {
       // Create: user must match clientId
       allow create: if isSignedIn() && request.resource.data.clientId == request.auth.uid;
 
-      // Update: Participants or Admin
+      // Update: Client (owner), Approved Provider (assigned or claiming open job), or Admin
       allow update: if isSignedIn() && (
         resource.data.clientId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid ||
+        (resource.data.providerId == request.auth.uid && isApprovedProvider()) ||
+        (resource.data.status == 'open' && isApprovedProvider()) ||
         isAdmin()
       );
 
@@ -180,17 +190,42 @@ service cloud.firestore {
 
     // --- USERS ---
     match /users/{userId} {
-      // Users can read/write their own data
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
-      allow read, write: if isAdmin();
-      
-      // Allow anyone to READ service provider profiles (needed for "Select Provider" list)
-      allow read: if isSignedIn() && resource.data.role == 'service_provider';
+      // Users can read their own profile; Admins can read all profiles;
+      // Signed-in users can read service provider profiles (needed for marketplace/provider selection)
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        resource.data.role == 'service_provider'
+      );
 
-      // Allow access to subcollections (e.g. documents)
+      // Create: Users can create their own profile upon registration,
+      // but cannot grant themselves admin rights or self-approve KYC as provider/agent
+      allow create: if isSignedIn() && request.auth.uid == userId
+                    && request.resource.data.role != 'admin'
+                    && (request.resource.data.role != 'service_provider' || request.resource.data.status != 'approved')
+                    && (request.resource.data.role != 'agent' || request.resource.data.status != 'approved');
+
+      // Update: Users can update their profile information,
+      // but CANNOT make themselves admin, and CANNOT self-approve KYC status
+      allow update: if isAdmin() || (
+        isSignedIn() && request.auth.uid == userId
+        // Cannot grant admin role
+        && request.resource.data.role != 'admin'
+        // Service providers and agents cannot set status to 'approved'
+        && (
+          (request.resource.data.role != 'service_provider' && request.resource.data.role != 'agent') ||
+          request.resource.data.status != 'approved' ||
+          resource.data.status == 'approved'
+        )
+      );
+
+      // Delete: Only admins can delete user records
+      allow delete: if isAdmin();
+
+      // Subcollections (e.g. sensitive identity & KYC documents)
+      // Strictly private: ONLY the document owner or an admin can access
       match /documents/{docId} {
-        allow read, write: if isSignedIn() && request.auth.uid == userId;
-        allow read, write: if isAdmin();
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
     }
 

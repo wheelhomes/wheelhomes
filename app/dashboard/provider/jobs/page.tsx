@@ -12,7 +12,7 @@ import {
     Search
 } from "lucide-react";
 import { db, storage } from "../../../../lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import ChatSheet from "../../../../components/chat/ChatSheet";
@@ -49,13 +49,35 @@ export default function MyJobsPage() {
 
     // Initial Load & Auth
     useEffect(() => {
-        const storedId = localStorage.getItem("tempUserId");
-        if (!storedId) {
-            router.push("/signin");
-        } else {
+        const verifyProvider = async () => {
+            const storedId = localStorage.getItem("tempUserId");
+            if (!storedId) {
+                router.push("/signin");
+                return;
+            }
             setProviderId(storedId);
-        }
-    }, []);
+
+            try {
+                const userDoc = await getDoc(doc(db, "users", storedId));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data.status !== 'approved') {
+                        if (data.status === 'pending_review' || data.status === 'pending') {
+                            router.replace("/dashboard/pending");
+                        } else if (data.status === 'rejected' || data.status === 'restricted') {
+                            router.replace("/settings/verification");
+                        } else {
+                            router.replace("/register/provider");
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Error verifying provider status in MyJobs:", e);
+            }
+        };
+
+        verifyProvider();
+    }, [router]);
 
     // Fetch Jobs
     useEffect(() => {

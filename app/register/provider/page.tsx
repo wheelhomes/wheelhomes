@@ -50,42 +50,39 @@ export default function RegisterProviderPage() {
             return;
         }
 
+        if (!idFile || !passportFile) {
+            alert("Please upload both your Government ID and a recent Passport Photograph.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
             let idUrl = "";
             let passportUrl = "";
 
-            // Helper for timeout
-            const uploadWithTimeout = (ref: any, file: File) => {
-                return Promise.race([
-                    uploadBytes(ref, file),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000)) // Reduced to 5s
-                ]);
-            };
-
-            // Upload ID
-            if (idFile) {
-                try {
-                    const compressedId = await compressImageToBase64(idFile);
-                    // STORAGE BYPASS: Base64
-                    idUrl = compressedId;
-                } catch (err: any) {
-                    console.error("ID Processing Failed:", err);
-                    alert(`Failed to process Government ID: ${err.message}`);
-                }
+            try {
+                idUrl = await compressImageToBase64(idFile);
+            } catch (err: any) {
+                console.error("ID Processing Failed:", err);
+                alert(`Failed to process Government ID: ${err.message || "Please select a valid image"}`);
+                setIsLoading(false);
+                return;
             }
 
-            // Upload Passport
-            if (passportFile) {
-                try {
-                    const compressedPassport = await compressImageToBase64(passportFile);
-                    // STORAGE BYPASS: Base64
-                    passportUrl = compressedPassport;
-                } catch (err) {
-                    console.error("Passport Processing Failed:", err);
-                    alert("Failed to process Passport Photo.");
-                }
+            try {
+                passportUrl = await compressImageToBase64(passportFile);
+            } catch (err: any) {
+                console.error("Passport Processing Failed:", err);
+                alert(`Failed to process Passport Photo: ${err.message || "Please select a valid image"}`);
+                setIsLoading(false);
+                return;
+            }
+
+            if (!idUrl || !passportUrl) {
+                alert("Both Government ID and Passport Photo are required to complete onboarding.");
+                setIsLoading(false);
+                return;
             }
 
             // Update User Profile
@@ -94,12 +91,15 @@ export default function RegisterProviderPage() {
             await updateDoc(doc(db, "users", currentUser.uid), {
                 role: "service_provider",
                 status: "pending_review",
+                rejectionReason: null,
+                rejectedDocs: [],
                 applicationData: {
                     ...formData,
                     services: services, // Save array
                     govIdUrl: idUrl,
                     passportUrl: passportUrl,
-                    submittedAt: new Date().toISOString()
+                    submittedAt: new Date().toISOString(),
+                    hasDocuments: true
                 }
             });
 
@@ -225,6 +225,7 @@ export default function RegisterProviderPage() {
                                     <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
                                         <input
                                             type="file"
+                                            accept="image/*"
                                             className="hidden"
                                             id="gov-id"
                                             onChange={(e) => setIdFile(e.target.files ? e.target.files[0] : null)}
@@ -240,6 +241,7 @@ export default function RegisterProviderPage() {
                                     <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
                                         <input
                                             type="file"
+                                            accept="image/*"
                                             className="hidden"
                                             id="passport-photo"
                                             onChange={(e) => setPassportFile(e.target.files ? e.target.files[0] : null)}
