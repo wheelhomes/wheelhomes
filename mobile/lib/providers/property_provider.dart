@@ -70,6 +70,7 @@ class PropertyProvider with ChangeNotifier {
     required String type,
     required String status,
     required String agentName,
+    String? agentId,
     String? agentImage,
     List<XFile> images = const [],
   }) async {
@@ -102,6 +103,8 @@ class PropertyProvider with ChangeNotifier {
         'status': status,
         'image': mainImage,
         'images': imageUrls,
+        'agentId': agentId ?? '',
+        'userId': agentId ?? '',
         'agentName': agentName,
         'agentImage': agentImage,
         'createdAt': DateTime.now().toIso8601String(),

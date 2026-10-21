@@ -186,6 +186,7 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
         sqft: int.tryParse(_sqftController.text) ?? 1000,
         type: _selectedType,
         status: _selectedStatus,
+        agentId: user.uid,
         agentName: agentName,
         images: _selectedImages,
       );
@@ -268,7 +269,7 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
                           Text('Status', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 14)),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: _selectedStatus,
+                            initialValue: _selectedStatus,
                             items: _propertyStatuses.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (val) => setState(() => _selectedStatus = val!),
                           ),
@@ -296,7 +297,7 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
                 Text('Property Category', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 14)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedType,
+                  initialValue: _selectedType,
                   items: _propertyTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                   onChanged: (val) => setState(() => _selectedType = val!),
                   decoration: const InputDecoration(

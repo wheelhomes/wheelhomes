@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../core/theme.dart';
+import '../../core/design_system/design_system.dart';
+import '../../core/app_logo.dart';
 import '../../providers/auth_provider.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
-  const RoleSelectionScreen({Key? key}) : super(key: key);
+  const RoleSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +20,9 @@ class RoleSelectionScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              const AppLogo(height: 50),
+              const SizedBox(height: 24),
               Text(
                 'Choose Your Role 🎯',
                 style: Theme.of(context).textTheme.headlineMedium,
@@ -31,12 +34,14 @@ class RoleSelectionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
-              // Option 1: Client / Homeowner
+              // Option 1: Client / Resident
               _RoleCard(
                 icon: LucideIcons.home,
-                title: 'Client / Tenant / Buyer',
-                subtitle: 'Find properties for rent/sale or hire skilled service providers.',
+                title: 'Client / Resident',
+                subtitle: 'Hire skilled services, request maintenance, or find homes to buy or rent.',
                 color: AppTheme.primary,
+                badgeText: 'Client',
+                badgeVariant: BrandBadgeVariant.green,
                 onTap: () => authProvider.selectRole('user'),
               ),
               const SizedBox(height: 16),
@@ -44,9 +49,11 @@ class RoleSelectionScreen extends StatelessWidget {
               // Option 2: Service Provider
               _RoleCard(
                 icon: LucideIcons.wrench,
-                title: 'Service Provider / Contractor',
-                subtitle: 'Offer home repair, plumbing, electrical, or maintenance services.',
-                color: AppTheme.accent,
+                title: 'Service Provider',
+                subtitle: 'Offer skilled trades — plumbing, electrical, carpentry, AC repair, etc.',
+                color: AppTheme.brandOrange,
+                badgeText: 'Provider',
+                badgeVariant: BrandBadgeVariant.orange,
                 onTap: () => authProvider.selectRole('service_provider'),
               ),
               const SizedBox(height: 16),
@@ -55,8 +62,10 @@ class RoleSelectionScreen extends StatelessWidget {
               _RoleCard(
                 icon: LucideIcons.building,
                 title: 'Real Estate Agent',
-                subtitle: 'List apartments, land, and commercial properties.',
-                color: const Color(0xFF8B5CF6), // Purple accent
+                subtitle: 'List apartments, houses, land, and commercial properties.',
+                color: AppTheme.slateDark,
+                badgeText: 'Agent',
+                badgeVariant: BrandBadgeVariant.neutral,
                 onTap: () => authProvider.selectRole('agent'),
               ),
 
@@ -85,6 +94,8 @@ class _RoleCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color color;
+  final String? badgeText;
+  final BrandBadgeVariant badgeVariant;
   final VoidCallback onTap;
 
   const _RoleCard({
@@ -92,6 +103,8 @@ class _RoleCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.color,
+    this.badgeText,
+    this.badgeVariant = BrandBadgeVariant.green,
     required this.onTap,
   });
 
@@ -106,13 +119,14 @@ class _RoleCard extends StatelessWidget {
           border: Border.all(color: AppTheme.border, width: 1.5),
           borderRadius: BorderRadius.circular(16),
           color: Colors.white,
+          boxShadow: AppTheme.cardShadow,
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(icon, color: color, size: 28),
@@ -122,13 +136,28 @@ class _RoleCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (badgeText != null) ...[
+                        const SizedBox(width: 6),
+                        BrandBadge(
+                          label: badgeText!,
+                          variant: badgeVariant,
+                          fontSize: 10,
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -142,7 +171,8 @@ class _RoleCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(LucideIcons.chevronRight, color: AppTheme.textSecondary),
+            const SizedBox(width: 8),
+            const Icon(LucideIcons.chevronRight, color: AppTheme.textSecondary, size: 20),
           ],
         ),
       ),

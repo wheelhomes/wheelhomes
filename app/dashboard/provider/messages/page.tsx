@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { db } from "../../../../lib/firebase";
+import { db, auth } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, getDoc, doc } from "firebase/firestore";
 import { UnifiedChat } from "@/components/chat/UnifiedChat";
 import { Search, MessageSquare, Clock, Filter, ChevronRight } from "lucide-react";
@@ -27,8 +27,8 @@ export default function ProviderMessagesPage() {
 
     // Fetch Current User & Verify Status
     useEffect(() => {
-        const verifyProvider = async () => {
-            const storedId = localStorage.getItem("tempUserId");
+        const unsubscribeAuth = auth.onAuthStateChanged(async (currentUser) => {
+            const storedId = currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem("tempUserId") : null);
             if (!storedId) {
                 router.push("/signin");
                 return;
@@ -40,10 +40,8 @@ export default function ProviderMessagesPage() {
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     if (data.status !== 'approved') {
-                        if (data.status === 'pending_review' || data.status === 'pending') {
+                        if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
-                        } else if (data.status === 'rejected' || data.status === 'restricted') {
-                            router.replace("/settings/verification");
                         } else {
                             router.replace("/register/provider");
                         }
@@ -52,9 +50,9 @@ export default function ProviderMessagesPage() {
             } catch (e) {
                 console.error("Error verifying provider status in messages:", e);
             }
-        };
+        });
 
-        verifyProvider();
+        return () => unsubscribeAuth();
     }, [router]);
 
     // Fetch Active Jobs for Messages
@@ -67,10 +65,14 @@ export default function ProviderMessagesPage() {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const rawSessions = snapshot.docs.map(doc => ({
-                jobId: doc.id,
-                ...doc.data()
-            } as ChatSession));
+            const rawSessions = snapshot.docs.map(doc => {
+                const d = doc.data();
+                return {
+                    jobId: doc.id,
+                    clientId: d.clientId || d.userId || "",
+                    ...d
+                } as ChatSession;
+            });
 
             // Set initial data immediately
             setSessions(rawSessions);
@@ -114,6 +116,9 @@ export default function ProviderMessagesPage() {
                     }
                 }
             });
+        }, (err) => {
+            console.warn("Messages query notice:", err);
+            setIsLoading(false);
         });
 
         return () => unsubscribe();

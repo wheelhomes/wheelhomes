@@ -11,7 +11,7 @@ import {
     Check,
     Search
 } from "lucide-react";
-import { db, storage } from "../../../../lib/firebase";
+import { db, storage, auth } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
@@ -20,6 +20,7 @@ import ChatSheet from "../../../../components/chat/ChatSheet";
 import { JobRequest } from "../../../../components/dashboard/provider/types";
 import { JobListItem } from "../../../../components/dashboard/provider/JobListItem";
 import { JobDetailView } from "../../../../components/dashboard/provider/JobDetailView";
+import { formatJobLocation } from "@/lib/job-utils";
 
 export default function MyJobsPage() {
     const router = useRouter();
@@ -49,8 +50,8 @@ export default function MyJobsPage() {
 
     // Initial Load & Auth
     useEffect(() => {
-        const verifyProvider = async () => {
-            const storedId = localStorage.getItem("tempUserId");
+        const unsubscribeAuth = auth.onAuthStateChanged(async (currentUser) => {
+            const storedId = currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem("tempUserId") : null);
             if (!storedId) {
                 router.push("/signin");
                 return;
@@ -62,10 +63,8 @@ export default function MyJobsPage() {
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     if (data.status !== 'approved') {
-                        if (data.status === 'pending_review' || data.status === 'pending') {
+                        if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
-                        } else if (data.status === 'rejected' || data.status === 'restricted') {
-                            router.replace("/settings/verification");
                         } else {
                             router.replace("/register/provider");
                         }
@@ -74,48 +73,72 @@ export default function MyJobsPage() {
             } catch (e) {
                 console.error("Error verifying provider status in MyJobs:", e);
             }
-        };
+        });
 
-        verifyProvider();
+        return () => unsubscribeAuth();
     }, [router]);
 
-    // Fetch Jobs
+    // Fetch Jobs (Direct Assignments + Invitations)
     useEffect(() => {
         if (!providerId) return;
 
-        const q = query(
+        const q1 = query(
             collection(db, "job_requests"),
             where("providerId", "==", providerId)
         );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedJobs: JobRequest[] = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as JobRequest));
+        const q2 = query(
+            collection(db, "job_requests"),
+            where("invitedProviderIds", "array-contains", providerId)
+        );
 
-            // Sort by createdAt desc
-            fetchedJobs.sort((a, b) => {
-                const dateA = new Date(a.createdAt).getTime();
-                const dateB = new Date(b.createdAt).getTime();
-                return dateB - dateA;
+        let directJobs: JobRequest[] = [];
+        let invitedJobs: JobRequest[] = [];
+
+        const updateCombinedJobs = () => {
+            const allJobs = [...directJobs, ...invitedJobs];
+            const nonArchivedJobs = allJobs.filter(j => !((j as any).isArchived) && (j.status as string) !== 'archived');
+            const uniqueJobs = Array.from(new Map(nonArchivedJobs.map(item => [item.id, item])).values());
+
+            uniqueJobs.sort((a, b) => {
+                const timeA = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+                const timeB = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
             });
 
-            setJobs(fetchedJobs);
+            setJobs(uniqueJobs);
             setIsLoading(false);
+        };
+
+        const unsubscribe1 = onSnapshot(q1, (snapshot) => {
+            directJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+            updateCombinedJobs();
         }, (error) => {
-            console.error("Error fetching jobs:", error);
+            console.warn("Notice fetching direct jobs:", error);
             setIsLoading(false);
         });
 
-        return () => unsubscribe();
+        const unsubscribe2 = onSnapshot(q2, (snapshot) => {
+            invitedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+            updateCombinedJobs();
+        }, (error) => {
+            console.warn("Notice fetching invited jobs:", error);
+            setIsLoading(false);
+        });
+
+        return () => {
+            unsubscribe1();
+            unsubscribe2();
+        };
     }, [providerId]);
 
     // Filter Logic
     const filteredJobs = jobs.filter(job => {
-        const matchesSearch = job.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        const locString = formatJobLocation(job.location);
+
+        const matchesSearch = (job.serviceType || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
             (job.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-            job.location.toLowerCase().includes(searchTerm.toLowerCase());
+            locString.toLowerCase().includes(searchTerm.toLowerCase());
 
         let matchesStatus = true;
         if (filter === "pending") matchesStatus = job.status === "pending";
@@ -129,10 +152,33 @@ export default function MyJobsPage() {
     const handleStatusUpdate = async (jobId: string, action: 'accepted' | 'rejected') => {
         try {
             const jobRef = doc(db, "job_requests", jobId);
-            await updateDoc(jobRef, { status: action });
+            const nowIso = new Date().toISOString();
+            const updates: any = { status: action };
+            if (action === 'accepted' && providerId) {
+                updates.providerId = providerId;
+                updates.acceptedAt = nowIso;
+            }
+
+            await updateDoc(jobRef, updates);
+            try {
+                await updateDoc(doc(db, "requests", jobId), updates);
+            } catch (_) {}
+
+            const targetJob = jobs.find(j => j.id === jobId);
+            const targetClient = targetJob?.clientId || (targetJob as any)?.userId;
+            if (targetClient) {
+                const notifTitle = action === 'accepted' ? "Job Accepted! 🎉" : "Job Declined";
+                const notifMsg = action === 'accepted'
+                    ? `Your request for ${targetJob?.serviceType || 'service'} has been accepted.`
+                    : `Provider is unavailable for ${targetJob?.serviceType || 'service'}.`;
+                try {
+                    await updateDoc(doc(db, "job_requests", jobId), { clientNotified: true });
+                } catch (_) {}
+            }
+
             if (selectedJob?.id === jobId) {
                 // Optimistic update
-                setSelectedJob(prev => prev ? { ...prev, status: action } : null);
+                setSelectedJob(prev => prev ? { ...prev, status: action, ...(action === 'accepted' ? { providerId } : {}) } : null);
             }
         } catch (error) {
             console.error("Error updating status:", error);
@@ -154,13 +200,20 @@ export default function MyJobsPage() {
         }
 
         try {
+            const nowIso = new Date().toISOString();
             const jobRef = doc(db, "job_requests", selectedJob.id);
-            await updateDoc(jobRef, {
+            const startUpdates = {
                 status: 'in_progress',
-                startTime: new Date().toISOString(),
+                startTime: nowIso,
                 estimatedDuration: estimatedTime,
-                startNote: startNote
-            });
+                startNote: startNote,
+                note: startNote
+            };
+            await updateDoc(jobRef, startUpdates);
+            try {
+                await updateDoc(doc(db, "requests", selectedJob.id), startUpdates);
+            } catch (_) {}
+
             setIsStartModalOpen(false);
             // Update selected job locally to reflect change immediately in detail view (if snapshot is slow)
             setSelectedJob(prev => prev ? { ...prev, status: 'in_progress' } : null);
@@ -182,13 +235,19 @@ export default function MyJobsPage() {
         if (!selectedJob) return;
 
         try {
+            const nowIso = new Date().toISOString();
             const jobRef = doc(db, "job_requests", selectedJob.id);
 
             if (completionType === 'full') {
-                await updateDoc(jobRef, {
+                const completeUpdates = {
                     status: 'fully_completed',
-                    actualEndTime: new Date().toISOString()
-                });
+                    actualEndTime: nowIso,
+                    completedAt: nowIso
+                };
+                await updateDoc(jobRef, completeUpdates);
+                try {
+                    await updateDoc(doc(db, "requests", selectedJob.id), completeUpdates);
+                } catch (_) {}
                 setSelectedJob(prev => prev ? { ...prev, status: 'fully_completed' } : null);
             } else {
                 if (!partialReason) {

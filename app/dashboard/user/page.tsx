@@ -81,9 +81,11 @@ export default function UserDashboard() {
     const handleMagicAnalyze = async (text: string) => {
         setIsMagicLoading(true);
         try {
+            const { auth } = await import("@/lib/firebase");
+            const idToken = await auth.currentUser?.getIdToken();
             const res = await fetch("/api/ai/magic-request", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
                 body: JSON.stringify({ prompt: text }),
             });
             const data = await res.json();

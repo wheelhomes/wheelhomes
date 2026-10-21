@@ -51,7 +51,18 @@ export default function VerificationSettingsPage() {
     const fetchUserData = async (uid: string) => {
         const docSnap = await getDoc(doc(db, "users", uid));
         if (docSnap.exists()) {
-            setUser({ uid: docSnap.id, ...docSnap.data() } as UserData);
+            const data = docSnap.data();
+            if (data.role === 'service_provider') {
+                if (data.status === 'approved') {
+                    router.replace("/dashboard/provider/settings");
+                } else if (data.status === 'pending_review' || data.status === 'pending') {
+                    router.replace("/dashboard/pending");
+                } else {
+                    router.replace("/register/provider");
+                }
+                return;
+            }
+            setUser({ uid: docSnap.id, ...data } as UserData);
         }
         setIsLoading(false);
     };
@@ -61,7 +72,6 @@ export default function VerificationSettingsPage() {
         setIsUploading(true);
 
         try {
-            let updates: any = {};
             let appDataUpdates: any = {};
 
             // Re-upload ID if selected
@@ -83,9 +93,8 @@ export default function VerificationSettingsPage() {
                 return;
             }
 
-            // Update User Doc
-            await updateDoc(doc(db, "users", user.uid), {
-                status: "pending_review", // Reset status to pending review
+            const userUpdates: any = {
+                status: "pending_review",
                 rejectionReason: null,
                 rejectedDocs: [],
                 "applicationData": {
@@ -93,7 +102,12 @@ export default function VerificationSettingsPage() {
                     ...appDataUpdates,
                     resubmittedAt: new Date().toISOString()
                 },
-            });
+            };
+            if (appDataUpdates.govIdUrl) userUpdates.govIdUrl = appDataUpdates.govIdUrl;
+            if (appDataUpdates.passportUrl) userUpdates.passportUrl = appDataUpdates.passportUrl;
+
+            // Update User Doc
+            await updateDoc(doc(db, "users", user.uid), userUpdates);
 
             // Dispatch pending review confirmation email
             if (user.email) {

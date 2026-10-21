@@ -6,6 +6,7 @@ import { auth, db } from "../../lib/firebase";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { AlertTriangle, Clock, ShieldAlert } from "lucide-react";
 import { UserProfile } from "../../types/user";
+import { isEmailVerifiedGlobally } from "@/lib/auth-helpers";
 import Link from "next/link";
 
 export default function DashboardLayout({
@@ -32,7 +33,6 @@ export default function DashboardLayout({
                 return;
             }
 
-            // Unsubscribe from previous listener if getting a new user update (unlikely but safe)
             if (unsubscribeDoc) {
                 unsubscribeDoc();
             }
@@ -45,23 +45,35 @@ export default function DashboardLayout({
 
                     // Logic to redirect if on "pending" page but actually approved
                     if (pathname?.includes("/dashboard/pending") && data.status === 'approved') {
-                        if (data.role === 'service_provider') router.push("/dashboard/provider");
-                        else router.push("/dashboard/user");
+                        if (data.role === 'service_provider') router.replace("/dashboard/provider");
+                        else if (data.role === 'agent') router.replace("/dashboard/agent");
+                        else router.replace("/dashboard/user");
                     }
                 }
                 setIsLoading(false);
             }, (error) => {
-                console.error("Error fetching user profile:", error);
+                console.warn("User profile fetch notice:", error);
                 setIsLoading(false);
             });
         });
 
-        // Cleanup function
         return () => {
             if (unsubscribeDoc) unsubscribeDoc();
             unsubscribeAuth();
         };
-    }, [pathname]);
+    }, []);
+
+    // Route transitions on profile or pathname updates
+    useEffect(() => {
+        if (isLoading || !userProfile) return;
+
+        // Auto-forward approved providers away from pending page
+        if (pathname?.includes("/dashboard/pending") && userProfile.status === 'approved') {
+            if (userProfile.role === 'service_provider') router.replace("/dashboard/provider");
+            else if (userProfile.role === 'agent') router.replace("/dashboard/agent");
+            else router.replace("/dashboard/user");
+        }
+    }, [pathname, userProfile, isLoading, router]);
 
     if (isLoading) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div></div>;
@@ -74,9 +86,13 @@ export default function DashboardLayout({
         return null;
     }
 
+    // Allow /dashboard/pending to render for applicants (both pending review and rejected updates)
+    if (pathname === "/dashboard/pending") {
+        return <>{children}</>;
+    }
+
     // 1. Pending Review State
-    if (userProfile.status === 'pending_review') {
-        // Allow access to the specific pending page, block others
+    if (userProfile.status === 'pending_review' || userProfile.status === 'pending') {
         if (pathname !== "/dashboard/pending") {
             router.replace("/dashboard/pending");
             return null;
@@ -85,6 +101,11 @@ export default function DashboardLayout({
 
     // 2. Rejected State
     if (userProfile.status === 'rejected') {
+        if (userProfile.role === 'service_provider') {
+            router.replace("/dashboard/pending");
+            return null;
+        }
+
         return (
             <div className="min-h-screen bg-red-50 flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden text-center p-8 border border-red-100">
@@ -103,18 +124,17 @@ export default function DashboardLayout({
                         </div>
                     )}
 
-                    <Link href="/settings/verification" className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2">
-                        Re-upload Documents
+                    <Link href="/register/provider" className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2">
+                        Update & Re-Submit Documents
                     </Link>
                 </div>
             </div>
         );
     }
 
-    // 3. Restricted State
-    if (userProfile.status === 'restricted' || (userProfile.status as string) === 'rejected') {
-        // Allow access to settings to fix issues
-        if (pathname?.startsWith("/dashboard/user/settings")) {
+    // 3. Restricted or Suspended State
+    if (userProfile.status === 'restricted' || userProfile.status === 'suspended') {
+        if (pathname?.startsWith("/dashboard/user/settings") || pathname?.startsWith("/dashboard/provider/settings")) {
             return <>{children}</>;
         }
 
@@ -122,17 +142,15 @@ export default function DashboardLayout({
             <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
                 <div className="max-w-md w-full text-center space-y-6">
                     <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto animate-in zoom-in duration-300">
-                        {userProfile.status === 'restricted' ? <ShieldAlert className="w-10 h-10" /> : <ShieldAlert className="w-10 h-10" />}
+                        <ShieldAlert className="w-10 h-10" />
                     </div>
 
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                            {userProfile.status === 'restricted' ? "Account Restricted" : "Application Rejected"}
+                            Account Restricted
                         </h1>
                         <p className="text-gray-500">
-                            {userProfile.status === 'restricted'
-                                ? "Your account has been temporarily disabled due to security or policy issues."
-                                : userProfile.rejectionReason || "Your application was not approved."}
+                            Your account has been temporarily disabled due to security or policy issues.
                         </p>
                     </div>
 
@@ -146,8 +164,8 @@ export default function DashboardLayout({
                     </div>
 
                     <div className="grid gap-3">
-                        <Link href="/dashboard/user/settings/verification" className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-all shadow-lg flex items-center justify-center gap-2">
-                            Fix Verification Issues
+                        <Link href={userProfile.role === 'service_provider' ? "/dashboard/provider/settings" : "/dashboard/user/settings"} className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-all shadow-lg flex items-center justify-center gap-2">
+                            Review Account Settings
                         </Link>
                         <button onClick={() => window.location.href = "mailto:support@wheelofcomfort.com"} className="text-sm font-bold text-gray-500 hover:text-gray-900">
                             Contact Support
@@ -158,9 +176,15 @@ export default function DashboardLayout({
         );
     }
 
-    // 4. Unverified State (Should have been caught by routing, but safety net)
-    if (userProfile.status === 'unverified') {
+    // 4. Email Verification Gating
+    if (!isEmailVerifiedGlobally(auth.currentUser, userProfile as any)) {
         router.replace("/verify-email");
+        return null;
+    }
+
+    // 4.5. Role Selection Gating
+    if (!userProfile.role || userProfile.role === 'pending_role_selection') {
+        router.replace("/role-selection");
         return null;
     }
 
@@ -171,10 +195,8 @@ export default function DashboardLayout({
             return null;
         }
         if (userProfile.status !== 'approved') {
-            if (userProfile.status === 'pending_review' || userProfile.status === 'pending') {
+            if (userProfile.status === 'pending_review' || userProfile.status === 'pending' || userProfile.status === 'rejected') {
                 router.replace("/dashboard/pending");
-            } else if (userProfile.status === 'rejected' || userProfile.status === 'restricted') {
-                router.replace("/settings/verification");
             } else {
                 router.replace("/register/provider");
             }
@@ -182,13 +204,19 @@ export default function DashboardLayout({
         }
     }
 
+    // 5.5. Agent Gating: Agent dashboard routes require agent or admin role
+    if (pathname?.startsWith("/dashboard/agent")) {
+        if (userProfile.role !== 'agent' && userProfile.role !== 'admin') {
+            router.replace(userProfile.role === 'service_provider' ? "/dashboard/provider" : "/dashboard/user");
+            return null;
+        }
+    }
+
     // 6. Provider Verification Inactivity Guard: Unapproved providers cannot access active dashboard routes
     if (userProfile.role === 'service_provider' && userProfile.status !== 'approved') {
         if (pathname !== "/dashboard/pending") {
-            if (userProfile.status === 'pending_review' || userProfile.status === 'pending') {
+            if (userProfile.status === 'pending_review' || userProfile.status === 'pending' || userProfile.status === 'rejected') {
                 router.replace("/dashboard/pending");
-            } else if (userProfile.status === 'rejected' || userProfile.status === 'restricted') {
-                router.replace("/settings/verification");
             } else {
                 router.replace("/register/provider");
             }

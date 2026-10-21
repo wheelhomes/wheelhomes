@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
 import { auth, db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -104,27 +104,39 @@ export default function SignupPage() {
             const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
             const user = userCredential.user;
 
-            // 2. Send Real Verification Link
-            await sendEmailVerification(user);
+            // Set displayName in Firebase Auth
+            const cleanFullName = formData.fullName.trim();
+            if (cleanFullName) {
+                await updateProfile(user, { displayName: cleanFullName }).catch(e => console.warn("updateProfile error:", e));
+            }
+
+            // 2. Send Real Verification Link (Background fallback)
+            sendEmailVerification(user).catch(e => console.warn("Firebase default link error:", e));
 
             // 3. Create User Doc (Step 1 Data)
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 email: formData.email,
-                fullName: formData.fullName,
+                fullName: cleanFullName,
                 phone: formData.phone,
-                status: "unverified", // Step 2 Requirement
-                role: "pending_role_selection", // Determined later or strictly 'service_provider' if this is provider-only flow
+                status: "unverified",
+                role: "pending_role_selection",
                 createdAt: new Date().toISOString()
             });
 
-            // 3. Send/Simulate OTP (Step 2 Trigger)
-            // In a real app we'd trigger a cloud function here (not on free tier).
+            // 4. Send Instant Verification Email via Brevo API
+            try {
+                const idToken = await user.getIdToken();
+                await fetch('/api/auth/send-verification-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+                    body: JSON.stringify({})
+                });
+            } catch (mailErr) {
+                console.warn("Could not dispatch instant verification email:", mailErr);
+            }
 
-
-            // For MVP, we redirect to Verify Page which simulates receiving it.
-
-            router.push("/verify-email");
+            router.replace("/verify-email");
 
 
         } catch (err: any) {

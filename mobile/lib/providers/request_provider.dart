@@ -61,6 +61,32 @@ class RequestProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> updateJobStatus({
+    required String jobId,
+    required String status,
+    String? note,
+    String? eta,
+  }) async {
+    _isSubmitting = true;
+    notifyListeners();
+    try {
+      await _firestoreService.updateJobStatus(
+        jobId: jobId,
+        status: status,
+        note: note,
+        eta: eta,
+      );
+      _isSubmitting = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error updating job status: $e');
+      _isSubmitting = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> createRequest({
     required String userId,
     required String serviceType,

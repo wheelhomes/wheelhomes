@@ -95,6 +95,53 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> verifyEmailOtp(String code) async {
+    if (_user == null) return false;
+    _setLoading(true);
+    _clearError();
+    try {
+      final success = await _authService.verifyEmailOtp(uid: _user!.uid, code: code);
+      if (success) {
+        await fetchProfile(_user!.uid);
+      }
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(AuthErrorHelper.format(e));
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> resendVerificationOtp() async {
+    if (_user == null) return false;
+    _setLoading(true);
+    _clearError();
+    try {
+      UserProfile? profile = _userProfile;
+      if (profile == null || profile.fullName.trim().isEmpty) {
+        profile = await _authService.getUserProfile(_user!.uid);
+        if (profile != null) _userProfile = profile;
+      }
+      final resolvedName = (profile?.fullName.trim().isNotEmpty ?? false)
+          ? profile!.fullName.trim()
+          : (_user!.displayName?.trim().isNotEmpty ?? false)
+              ? _user!.displayName!.trim()
+              : '';
+      final success = await _authService.resendVerificationOtp(
+        uid: _user!.uid,
+        email: profile?.email ?? _user!.email ?? '',
+        name: resolvedName,
+      );
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(AuthErrorHelper.format(e));
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<void> selectRole(String role) async {
     if (_user == null) return;
     _setLoading(true);
@@ -118,6 +165,8 @@ class AuthProvider with ChangeNotifier {
     List<String> existingJobPhotoUrls = const [],
     String? bio,
     String? serviceCategory,
+    String? experience,
+    String? coverageArea,
   }) async {
     if (_user == null) return false;
     _setLoading(true);
@@ -134,6 +183,27 @@ class AuthProvider with ChangeNotifier {
         existingJobPhotoUrls: existingJobPhotoUrls,
         bio: bio,
         serviceCategory: serviceCategory,
+        experience: experience,
+        coverageArea: coverageArea,
+      );
+      await fetchProfile(_user!.uid);
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(AuthErrorHelper.format(e));
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> updatePassportPhoto(File imageFile) async {
+    if (_user == null) return false;
+    _setLoading(true);
+    _clearError();
+    try {
+      await _authService.updatePassportPhoto(
+        uid: _user!.uid,
+        imageFile: imageFile,
       );
       await fetchProfile(_user!.uid);
       _setLoading(false);

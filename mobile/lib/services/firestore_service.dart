@@ -12,42 +12,50 @@ class FirestoreService {
     });
   }
 
-  // Real-time Requests Stream for User
+  // Real-time Requests Stream for User (Client Requests)
   Stream<List<ServiceRequestModel>> streamUserRequests(String userId) {
     return _firestore
-        .collection('requests')
-        .where('userId', isEqualTo: userId)
+        .collection('job_requests')
+        .where('clientId', isEqualTo: userId)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final list = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
           .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
-  // Real-time Stream of Open / Pending Requests for Providers (Marketplace)
+  // Real-time Stream of Open Requests for Providers (Marketplace)
   Stream<List<ServiceRequestModel>> streamOpenRequests() {
     return _firestore
-        .collection('requests')
-        .where('status', isEqualTo: 'pending')
+        .collection('job_requests')
+        .where('status', isEqualTo: 'open')
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final list = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where((j) => (j.providerId == null || j.providerId!.isEmpty) && (j.price ?? 0) > 0)
           .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
   // Real-time Stream of Jobs Assigned to a Specific Provider
   Stream<List<ServiceRequestModel>> streamProviderJobs(String providerId) {
     return _firestore
-        .collection('requests')
+        .collection('job_requests')
         .where('providerId', isEqualTo: providerId)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final list = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where((j) => j.status != 'archived')
           .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
@@ -66,26 +74,105 @@ class FirestoreService {
       throw Exception('Service provider account must be approved by admin before accepting job requests.');
     }
 
-    await _firestore.collection('requests').doc(jobId).update({
-      'status': 'assigned',
+    final acceptedAt = DateTime.now().toIso8601String();
+    final updates = {
+      'status': 'accepted',
       'providerId': providerId,
-      'acceptedAt': DateTime.now().toIso8601String(),
-    });
+      'acceptedAt': acceptedAt,
+    };
 
     try {
-      final reqDoc = await _firestore.collection('requests').doc(jobId).get();
-      final clientId = reqDoc.data()?['userId'];
+      await _firestore.collection('job_requests').doc(jobId).update(updates);
+    } catch (_) {}
+    try {
+      await _firestore.collection('requests').doc(jobId).update(updates);
+    } catch (_) {}
+
+    try {
+      DocumentSnapshot<Map<String, dynamic>> reqDoc = await _firestore.collection('job_requests').doc(jobId).get();
+      if (!reqDoc.exists) {
+        reqDoc = await _firestore.collection('requests').doc(jobId).get();
+      }
+      final clientId = reqDoc.data()?['clientId'] ?? reqDoc.data()?['userId'];
       final serviceType = reqDoc.data()?['serviceType'] ?? 'Service Request';
 
-      if (clientId != null && '$clientId'.isNotEmpty) {
+      if (clientId != null && clientId.toString().isNotEmpty) {
         await _firestore.collection('notifications').add({
           'userId': clientId,
+          'recipientId': clientId,
           'title': 'Specialist Assigned 🛠️',
           'body': 'A verified specialist has accepted your $serviceType request and is dispatching.',
           'type': 'job_update',
           'isRead': false,
-          'createdAt': DateTime.now().toIso8601String(),
+          'createdAt': acceptedAt,
           'payload': {'jobId': jobId},
+        });
+      }
+    } catch (_) {}
+  }
+
+  // Update Job Status (Start, Complete, Cancel)
+  Future<void> updateJobStatus({
+    required String jobId,
+    required String status,
+    String? note,
+    String? eta,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final updates = <String, dynamic>{
+      'status': status,
+      'updatedAt': now,
+      if (status == 'in_progress') ...{
+        'startTime': now,
+        if (eta != null && eta.isNotEmpty) 'estimatedDuration': eta,
+        if (note != null && note.isNotEmpty) ...{
+          'note': note,
+          'startNote': note,
+        },
+      },
+      if (status == 'completed' || status == 'fully_completed') ...{
+        'completedAt': now,
+        'actualEndTime': now,
+      },
+      if (note != null && note.isNotEmpty) 'note': note,
+    };
+
+    try {
+      await _firestore.collection('job_requests').doc(jobId).update(updates);
+    } catch (_) {}
+    try {
+      await _firestore.collection('requests').doc(jobId).update(updates);
+    } catch (_) {}
+
+    try {
+      DocumentSnapshot<Map<String, dynamic>> reqDoc = await _firestore.collection('job_requests').doc(jobId).get();
+      if (!reqDoc.exists) {
+        reqDoc = await _firestore.collection('requests').doc(jobId).get();
+      }
+      final clientId = reqDoc.data()?['clientId'] ?? reqDoc.data()?['userId'];
+      final serviceType = reqDoc.data()?['serviceType'] ?? 'Service Request';
+
+      if (clientId != null && clientId.toString().isNotEmpty) {
+        final title = status == 'in_progress'
+            ? 'Job Started 🚀'
+            : status == 'completed' || status == 'fully_completed'
+                ? 'Job Completed 🎉'
+                : 'Job Status Update';
+        final body = status == 'in_progress'
+            ? 'Specialist has started working on $serviceType.${eta != null ? " ETA: $eta" : ""}'
+            : status == 'completed' || status == 'fully_completed'
+                ? 'Specialist has marked $serviceType as completed. Please confirm to release payment.'
+                : 'Your $serviceType status was updated to $status.';
+
+        await _firestore.collection('notifications').add({
+          'userId': clientId,
+          'recipientId': clientId,
+          'title': title,
+          'body': body,
+          'type': 'job_update',
+          'isRead': false,
+          'createdAt': now,
+          'payload': {'jobId': jobId, 'status': status},
         });
       }
     } catch (_) {}
@@ -100,16 +187,27 @@ class FirestoreService {
     double? price,
     List<String> images = const [],
   }) async {
-    final docRef = await _firestore.collection('requests').add({
+    final now = DateTime.now().toIso8601String();
+    final docData = {
       'userId': userId,
+      'clientId': userId,
       'serviceType': serviceType,
       'description': description,
       'location': location,
       'price': price,
-      'status': 'pending',
-      'createdAt': DateTime.now().toIso8601String(),
+      'budget': price,
+      'status': 'open',
+      'createdAt': now,
       'images': images,
-    });
+      'photos': images,
+      'paymentStatus': 'unpaid',
+    };
+
+    final docRef = await _firestore.collection('job_requests').add(docData);
+    try {
+      await _firestore.collection('requests').doc(docRef.id).set(docData);
+    } catch (_) {}
+
     return docRef.id;
   }
 

@@ -20,27 +20,15 @@ export default function AdminLoginPage() {
         const password = formData.get("password") as string;
 
         try {
-            // Import auth dynamically or at top level if already there
             const { signInWithEmailAndPassword } = await import("firebase/auth");
             const { auth } = await import("../../../lib/firebase");
 
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-            } catch (authErr) {
-                // If using default admin credentials or local testing, allow fallback
-                if (email === "admin@wheelofcomfort.com" || email === "admin@wheelhomes.com") {
-                    console.warn("Using local admin credential fallback:", authErr);
-                } else {
-                    throw authErr;
-                }
-            }
+            await signInWithEmailAndPassword(auth, email, password);
 
-            // Set token for local route protection
-            localStorage.setItem("adminToken", "valid-admin-token");
+            // Admin authorization is verified by AdminLayout against Firestore / claims.
             router.push("/admin/dashboard");
-        } catch (err: any) {
-            console.error(err);
-            setError("Invalid credentials. You can use Quick Dev Access below to test locally.");
+        } catch {
+            setError("Invalid credentials.");
         } finally {
             setIsLoading(false);
         }
@@ -73,9 +61,9 @@ export default function AdminLoginPage() {
                                     name="email"
                                     type="email"
                                     required
-                                    defaultValue="admin@wheelhomes.com"
+                                    autoComplete="username"
                                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-gray-900"
-                                    placeholder="admin@wheelhomes.com"
+                                    placeholder="admin@example.com"
                                 />
                             </div>
                         </div>
@@ -88,7 +76,7 @@ export default function AdminLoginPage() {
                                     name="password"
                                     type="password"
                                     required
-                                    defaultValue="admin123456"
+                                    autoComplete="current-password"
                                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-medium text-gray-900"
                                     placeholder="••••••••"
                                 />
@@ -102,29 +90,6 @@ export default function AdminLoginPage() {
                         >
                             {isLoading ? "Signing in..." : "Access Dashboard"}
                         </button>
-
-                        {/* Local Dev / Quick Test Access */}
-                        <div className="pt-2 border-t border-gray-100 text-center">
-                            <button
-                                type="button"
-                                disabled={isLoading}
-                                onClick={async () => {
-                                    setIsLoading(true);
-                                    try {
-                                        const { signInWithEmailAndPassword } = await import("firebase/auth");
-                                        const { auth } = await import("../../../lib/firebase");
-                                        await signInWithEmailAndPassword(auth, "admin@wheelhomes.com", "admin123456");
-                                    } catch (e) {
-                                        console.warn("Dev auto-auth note:", e);
-                                    }
-                                    localStorage.setItem("adminToken", "valid-admin-token");
-                                    router.push("/admin/dashboard");
-                                }}
-                                className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-orange-200"
-                            >
-                                <Shield className="w-3.5 h-3.5" /> Quick Dev Access (Auto-sign in as Admin)
-                            </button>
-                        </div>
 
                         <div className="text-center mt-3">
                             <Link href="/" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">

@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { db } from "../../../lib/firebase";
+import { db, auth } from "../../../lib/firebase";
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, where, getDocs, deleteDoc, getDoc, setDoc, addDoc } from "firebase/firestore";
 import {
     Users, Search, Filter, Briefcase, Home, Shield, CheckCircle, XCircle, Clock, Eye, X, Check, FileText, Trash2, UserPlus,
-    MapPin, Calendar, Camera, AlertCircle, ArrowUpRight
+    MapPin, Calendar, Camera, AlertCircle, ArrowUpRight, Ban, CheckCircle2, UserCheck
 } from "lucide-react";
 import { UserProfile } from "../../../types/user";
 import DeleteUserModal from "../../../components/admin/DeleteUserModal";
@@ -288,6 +288,7 @@ export default function UserManagementPage() {
             pending_review: "bg-yellow-100 text-yellow-800 animate-pulse",
             rejected: "bg-red-100 text-red-800",
             restricted: "bg-red-900 text-white",
+            suspended: "bg-amber-900 text-white",
             unverified: "bg-gray-100 text-gray-800"
         };
         const icons = {
@@ -295,6 +296,7 @@ export default function UserManagementPage() {
             pending_review: Clock,
             rejected: XCircle,
             restricted: Shield,
+            suspended: Ban,
             unverified: Users
         };
         const Style = styles[status as keyof typeof styles] || styles.unverified;
@@ -320,6 +322,8 @@ export default function UserManagementPage() {
             matchesStatus = user.status === "pending_review" || user.status === "pending";
         } else if (statusFilter === "unverified") {
             matchesStatus = user.status === "unverified";
+        } else if (statusFilter === "suspended") {
+            matchesStatus = user.status === "suspended";
         } else if (statusFilter === "rejected") {
             matchesStatus = user.status === "rejected" || user.status === "restricted";
         }
@@ -333,23 +337,101 @@ export default function UserManagementPage() {
         setIsDeleteModalOpen(true);
     };
 
-    const confirmDeleteUser = async () => {
-        if (!userToDelete) return;
-
+    // TIER 1: Suspend user account (revokes Firebase Auth + marks suspended in Firestore)
+    const handleSuspendUser = async (user: UserProfile, reason: string) => {
         setIsProcessing(true);
         try {
-            // Delete from Firestore
-            await deleteDoc(doc(db, "users", userToDelete.uid));
+            const token = await auth.currentUser?.getIdToken();
+            const res = await fetch('/api/admin/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    action: 'suspend',
+                    targetUid: user.uid,
+                    reason
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to suspend user');
+            }
 
-            // Note: We cannot delete from Firebase Auth client-side without Admin SDK.
-
-            setUsers(prev => prev.filter(u => u.uid !== userToDelete.uid));
+            setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, status: 'suspended', suspensionReason: reason } : u));
             setIsDeleteModalOpen(false);
             setUserToDelete(null);
-            alert(`User ${userToDelete.fullName} has been deleted.`);
-        } catch (error) {
-            console.error("Error deleting user:", error);
-            alert("Failed to delete user. Check console for details.");
+            alert(`User ${user.fullName} has been suspended (login access revoked).`);
+        } catch (err: any) {
+            console.error("Suspend error:", err);
+            alert(err.message || "Failed to suspend user.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // TIER 1: Reactivate suspended user account
+    const handleReactivateUser = async (user: UserProfile) => {
+        setIsProcessing(true);
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            const res = await fetch('/api/admin/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    action: 'reactivate',
+                    targetUid: user.uid
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to reactivate user');
+            }
+
+            setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, status: 'approved', suspensionReason: undefined } : u));
+            setIsDeleteModalOpen(false);
+            setUserToDelete(null);
+            alert(`User ${user.fullName} has been reactivated successfully.`);
+        } catch (err: any) {
+            console.error("Reactivate error:", err);
+            alert(err.message || "Failed to reactivate user.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // TIER 2: Permanent erasure from Firestore AND Firebase Authentication
+    const handlePermanentDelete = async (user: UserProfile) => {
+        setIsProcessing(true);
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            const res = await fetch('/api/admin/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    action: 'delete',
+                    targetUid: user.uid
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to permanently delete user');
+            }
+
+            setUsers(prev => prev.filter(u => u.uid !== user.uid));
+            setIsDeleteModalOpen(false);
+            setUserToDelete(null);
+            alert(data.message || `User ${user.fullName} has been permanently deleted from both Firestore and Firebase Auth.`);
+        } catch (err: any) {
+            console.error("Permanent delete error:", err);
+            alert(err.message || "Failed to delete user.");
         } finally {
             setIsProcessing(false);
         }
@@ -376,22 +458,12 @@ export default function UserManagementPage() {
                     </div>
 
                     <div className="pt-2 flex flex-col gap-3">
-                        <button
-                            onClick={async () => {
-                                try {
-                                    const { signInWithEmailAndPassword, getAuth } = await import("firebase/auth");
-                                    const auth = getAuth();
-                                    await signInWithEmailAndPassword(auth, "admin@wheelhomes.com", "admin123456");
-                                    setError(null);
-                                    window.location.reload();
-                                } catch (e: any) {
-                                    alert("Could not switch to admin: " + e.message);
-                                }
-                            }}
+                        <a
+                            href="/admin/login"
                             className="w-full py-3 px-4 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-orange-200 cursor-pointer flex items-center justify-center gap-2"
                         >
-                            <Shield className="w-4 h-4" /> Sign In as Official Admin (admin@wheelhomes.com)
-                        </button>
+                            <Shield className="w-4 h-4" /> Sign in with an admin account
+                        </a>
                     </div>
                 </div>
             </div>
@@ -438,8 +510,9 @@ export default function UserManagementPage() {
                     <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
                         {[
                             { id: "all", label: "All Roles" },
+                            { id: "user", label: "Clients" },
                             { id: "service_provider", label: "Providers" },
-                            { id: "user", label: "Clients" }
+                            { id: "agent", label: "Agents" }
                         ].map(rf => (
                             <button
                                 key={rf.id}
@@ -458,6 +531,7 @@ export default function UserManagementPage() {
                             { id: "approved", label: "Active" },
                             { id: "pending", label: "Pending KYC" },
                             { id: "unverified", label: "In Onboarding" },
+                            { id: "suspended", label: "Suspended" },
                             { id: "rejected", label: "Rejected" }
                         ].map(sf => (
                             <button
@@ -494,7 +568,19 @@ export default function UserManagementPage() {
                                         <div className="font-bold text-gray-900">{user.fullName || "Unnamed User"}</div>
                                         <div className="text-xs text-gray-500">{user.email}</div>
                                     </td>
-                                    <td className="p-4 capitalize">{user.role?.replace('_', ' ') || "User"}</td>
+                                    <td className="p-4">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                            user.role === 'service_provider' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                                            user.role === 'agent' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                            user.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                            'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        }`}>
+                                            {user.role === 'service_provider' ? 'Service Provider' :
+                                             user.role === 'agent' ? 'Real Estate Agent' :
+                                             user.role === 'admin' ? 'Admin' :
+                                             'Client'}
+                                        </span>
+                                    </td>
                                     <td className="p-4 uppercase text-xs">{getStatusBadge(user.status)}</td>
                                     <td className="p-4 text-xs text-gray-500">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Recent'}</td>
                                     <td className="p-4 text-right flex items-center justify-end gap-2">
@@ -519,13 +605,23 @@ export default function UserManagementPage() {
                                             </button>
                                         )}
 
-                                        <button
-                                            onClick={() => handleDeleteClick(user)}
-                                            title="Delete User"
-                                            className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {user.status === 'suspended' ? (
+                                            <button
+                                                onClick={() => handleDeleteClick(user)}
+                                                title="Manage / Reactivate Suspended User"
+                                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                            >
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Reactivate
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDeleteClick(user)}
+                                                title="Suspend User (Tier 1 Safe Moderation)"
+                                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                            >
+                                                <Ban className="w-3.5 h-3.5 text-amber-600" /> Suspend
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             );
@@ -684,14 +780,16 @@ export default function UserManagementPage() {
                 </div>
             )}
 
-            {/* DELETE MODAL */}
+            {/* MODERATION / DELETE MODAL */}
             {userToDelete && (
                 <DeleteUserModal
                     isOpen={isDeleteModalOpen}
                     onClose={() => setIsDeleteModalOpen(false)}
-                    onConfirm={confirmDeleteUser}
                     user={userToDelete}
                     isProcessing={isProcessing}
+                    onSuspend={handleSuspendUser}
+                    onReactivate={handleReactivateUser}
+                    onPermanentDelete={handlePermanentDelete}
                 />
             )}
         </div>

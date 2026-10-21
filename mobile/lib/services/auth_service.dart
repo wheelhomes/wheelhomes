@@ -32,17 +32,27 @@ class AuthService {
     required String fullName,
     required String phone,
   }) async {
+    final cleanEmail = email.trim();
+    final cleanName = fullName.trim();
+    final cleanPhone = phone.trim();
+
     final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
+      email: cleanEmail,
       password: password.trim(),
     );
 
     if (credential.user != null) {
+      final uid = credential.user!.uid;
+
+      if (cleanName.isNotEmpty) {
+        credential.user!.updateDisplayName(cleanName).catchError((_) {});
+      }
+
       final userProfile = UserProfile(
-        uid: credential.user!.uid,
-        email: email.trim(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
+        uid: uid,
+        email: cleanEmail,
+        fullName: cleanName,
+        phone: cleanPhone,
         role: 'pending_role_selection',
         status: 'unverified',
         createdAt: DateTime.now().toIso8601String(),
@@ -50,11 +60,39 @@ class AuthService {
 
       await _firestore
           .collection('users')
-          .doc(credential.user!.uid)
+          .doc(uid)
           .set(userProfile.toMap());
+
+      // Dispatch secure instant verification email via backend
+      EmailService.requestVerificationOtp().catchError((e) {
+        debugPrint('[AuthService] Could not request verification email: $e');
+        return false;
+      });
     }
 
     return credential;
+  }
+
+  // Verify 6-digit OTP code securely via backend API
+  Future<bool> verifyEmailOtp({
+    required String uid,
+    required String code,
+  }) async {
+    final cleanCode = code.trim().replaceAll(' ', '');
+    final success = await EmailService.verifyOtp(code: cleanCode);
+    if (!success) {
+      throw Exception('Incorrect or expired verification code. Please check your email.');
+    }
+    return true;
+  }
+
+  // Resend 6-digit verification code securely via backend API
+  Future<bool> resendVerificationOtp({
+    required String uid,
+    required String email,
+    required String name,
+  }) async {
+    return await EmailService.requestVerificationOtp();
   }
 
   // Fetch User Profile
@@ -75,6 +113,7 @@ class AuthService {
     await _firestore.collection('users').doc(uid).update({
       'role': role,
       'status': status,
+      'emailVerified': true,
     });
   }
 
@@ -102,6 +141,8 @@ class AuthService {
     List<String> existingJobPhotoUrls = const [],
     String? bio,
     String? serviceCategory,
+    String? experience,
+    String? coverageArea,
   }) async {
     // 1. Concurrently upload new files or preserve existing valid URLs
     Future<String> resolveGovId() async {
@@ -157,6 +198,8 @@ class AuthService {
         ? serviceCategory.trim()
         : 'General Maintenance';
     final cleanBio = (bio != null && bio.trim().isNotEmpty) ? bio.trim() : '';
+    final cleanExperience = (experience != null && experience.trim().isNotEmpty) ? experience.trim() : '';
+    final cleanCoverage = (coverageArea != null && coverageArea.trim().isNotEmpty) ? coverageArea.trim() : '';
 
     // 2. Save Document details in subcollections
     try {
@@ -186,18 +229,31 @@ class AuthService {
       debugPrint('[AuthService] Documents subcollection notice: $e');
     }
 
-    // 3. Update main User Profile (uses set with merge: true to guarantee no NOT_FOUND error)
+    // 3. Check if user is currently approved to prevent demoting approved status on update
+    String resolvedStatus = 'pending_review';
+    try {
+      final docSnap = await _firestore.collection('users').doc(uid).get();
+      if (docSnap.exists && docSnap.data()?['status'] == 'approved') {
+        resolvedStatus = 'approved';
+      }
+    } catch (_) {}
+
+    // 4. Update main User Profile (uses set with merge: true to guarantee no NOT_FOUND error)
     await _firestore.collection('users').doc(uid).set({
-      'status': 'pending_review',
+      'status': resolvedStatus,
       'rejectionReason': null,
       'rejectedDocs': [],
       'bio': cleanBio,
       'description': cleanBio,
       'serviceCategory': cleanCategory,
       'services': [cleanCategory],
+      'experience': cleanExperience,
+      'coverageArea': cleanCoverage,
+      'idType': idType,
       'jobPhotos': combinedJobPhotos,
       'govIdUrl': govIdUrl,
       'passportUrl': passportUrl,
+      'photoURL': passportUrl,
       'kycSubmittedAt': now,
       'applicationData': {
         'idType': idType,
@@ -207,56 +263,96 @@ class AuthService {
         'bio': cleanBio,
         'description': cleanBio,
         'serviceCategory': cleanCategory,
+        'primaryService': cleanCategory,
         'services': [cleanCategory],
+        'experience': cleanExperience,
+        'coverageArea': cleanCoverage,
         'submittedAt': now,
         'hasDocuments': true,
       },
     }, SetOptions(merge: true));
 
-    // 4. In-App Notification
-    try {
-      await _firestore.collection('notifications').add({
-        'userId': uid,
-        'recipientId': uid,
-        'title': 'Onboarding Successful 🎉',
-        'message': 'Your onboarding documents have been submitted. Your account is currently under pending review.',
-        'body': 'Your onboarding documents have been submitted. Your account is currently under pending review.',
-        'type': 'info',
-        'read': false,
-        'isRead': false,
-        'createdAt': now,
-        'link': '/dashboard/pending',
-      });
-    } catch (_) {}
-
-    // 5. Dispatch confirmation email to user via Brevo HTTPS REST API
-    try {
-      String? candidateEmail = currentUser?.email;
-      String? candidateName = currentUser?.displayName;
-
+    // 5. In-App Notification (only if submitting for initial review)
+    if (resolvedStatus != 'approved') {
       try {
-        final userDoc = await _firestore.collection('users').doc(uid).get();
-        if (userDoc.exists) {
-          final data = userDoc.data();
-          if (candidateEmail == null || candidateEmail.isEmpty) {
-            candidateEmail = data?['email'];
-          }
-          if (candidateName == null || candidateName.isEmpty) {
-            candidateName = data?['fullName'] ?? data?['displayName'] ?? data?['businessName'] ?? data?['name'];
-          }
-        }
+        await _firestore.collection('notifications').add({
+          'userId': uid,
+          'recipientId': uid,
+          'title': 'Onboarding Successful 🎉',
+          'message': 'Your onboarding documents have been submitted. Your account is currently under pending review.',
+          'body': 'Your onboarding documents have been submitted. Your account is currently under pending review.',
+          'type': 'info',
+          'read': false,
+          'isRead': false,
+          'createdAt': now,
+          'link': '/dashboard/pending',
+        });
       } catch (_) {}
 
-      if (candidateEmail != null && candidateEmail.isNotEmpty) {
-        EmailService.sendPendingReviewNotification(
-          email: candidateEmail,
-          name: candidateName ?? 'Valued Partner',
-          uid: uid,
-        );
+      // 6. Dispatch confirmation email to user via Brevo HTTPS REST API (initial onboarding only)
+      try {
+        String? candidateEmail = currentUser?.email;
+        String? candidateName = currentUser?.displayName;
+
+        try {
+          final userDoc = await _firestore.collection('users').doc(uid).get();
+          if (userDoc.exists) {
+            final data = userDoc.data();
+            if (candidateEmail == null || candidateEmail.isEmpty) {
+              candidateEmail = data?['email'];
+            }
+            if (candidateName == null || candidateName.isEmpty) {
+              candidateName = data?['fullName'] ?? data?['displayName'] ?? data?['businessName'] ?? data?['name'];
+            }
+          }
+        } catch (_) {}
+
+        if (candidateEmail != null && candidateEmail.isNotEmpty) {
+          EmailService.sendPendingReviewNotification(
+            email: candidateEmail,
+            name: candidateName ?? 'Valued Partner',
+            uid: uid,
+          );
+        }
+      } catch (e) {
+        debugPrint('[AuthService] ⚠️ Could not dispatch pending review email: $e');
       }
-    } catch (e) {
-      debugPrint('[AuthService] ⚠️ Could not dispatch pending review email: $e');
     }
+  }
+
+  /// Updates only the provider's passport photograph/avatar and synchronizes across Web & Mobile
+  Future<String> updatePassportPhoto({
+    required String uid,
+    required File imageFile,
+  }) async {
+    final downloadUrl = await _storageService.uploadLocalFile(
+      file: imageFile,
+      storagePath: 'provider_docs/$uid/passport_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      folder: 'wheelhomes/provider_docs',
+    );
+    final now = DateTime.now().toIso8601String();
+
+    await _firestore.collection('users').doc(uid).set({
+      'passportUrl': downloadUrl,
+      'photoURL': downloadUrl,
+      'applicationData': {
+        'passportUrl': downloadUrl,
+      },
+      'updatedAt': now,
+    }, SetOptions(merge: true));
+
+    try {
+      await _firestore.collection('users').doc(uid).collection('documents').doc('passport').set({
+        'data': downloadUrl,
+        'type': 'passport',
+        'uploadedAt': now,
+        'mimeType': 'image/jpeg',
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[AuthService] Documents passport notice: $e');
+    }
+
+    return downloadUrl;
   }
 
   // Sign Out

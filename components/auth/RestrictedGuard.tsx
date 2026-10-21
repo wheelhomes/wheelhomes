@@ -27,16 +27,17 @@ export default function RestrictedGuard({ children }: { children: React.ReactNod
                         // Allow specific paths
                         const allowedPaths = [
                             '/dashboard/user/settings',
+                            '/dashboard/provider/settings',
+                            '/register/provider',
                             '/contact',
                             '/about-us',
                             '/signin',
                         ];
 
                         // If current path is NOT allowed, force redirect
-                        // Also allow static assets or home if needed, but requirements said "No dashboard actions"
                         if (!allowedPaths.some(p => pathname?.startsWith(p)) && pathname !== '/') {
-                            // Force them to verification
-                            router.push('/dashboard/user/settings/verification');
+                            // Force them to verification/settings
+                            router.push(data.role === 'service_provider' ? '/dashboard/provider/settings' : '/dashboard/user/settings/verification');
                         }
                     } else {
                         setIsRestricted(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import PropertyHeader from "@/components/property/PropertyHeader";
@@ -10,21 +10,65 @@ import PropertyOverview from "@/components/property/PropertyOverview";
 import PropertyDescription from "@/components/property/PropertyDescription";
 import PropertyFeatures from "@/components/property/PropertyFeatures";
 import PropertyAgentSidebar from "@/components/property/PropertyAgentSidebar";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+
+const NIGERIAN_PROPERTY_FALLBACK = {
+    id: "prop_banana_island_01",
+    title: "Luxury 5-Bedroom Detached Mansion with Infinity Pool",
+    address: "Zone A, Banana Island, Ikoyi, Lagos",
+    location: "Banana Island, Ikoyi, Lagos",
+    price: "₦450,000,000",
+    type: "Mansion",
+    status: "For Sale",
+    beds: 5,
+    baths: 6,
+    sqft: 4500,
+    agentName: "Babatunde Balogun",
+    agentPhone: "+234 803 555 0192",
+    description: "An architectural masterpiece nestled within the ultra-secure Banana Island enclave. Featuring double-volume ceilings, private elevator, cinema hall, 30kVA backup generator, and breathtaking lagoon vistas.",
+};
 
 function PropertyContent() {
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
+    const [property, setProperty] = useState<any>(NIGERIAN_PROPERTY_FALLBACK);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Mock data - normally fetched based on id
-    const property = {
-        title: "Modern Apartment on the Bay",
-        address: "774 NE 84th St Miami, FL 33879",
-        price: "₦1,500",
-        type: "Apartment",
-        status: "For Rent"
-    };
+    useEffect(() => {
+        if (!id) {
+            setIsLoading(false);
+            return;
+        }
 
-    if (!id) return <div className="p-20 text-center">Loading property...</div>;
+        async function fetchProperty() {
+            try {
+                const docSnap = await getDoc(doc(db, "properties", id!));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setProperty({
+                        id: docSnap.id,
+                        title: data.title || NIGERIAN_PROPERTY_FALLBACK.title,
+                        address: data.address || data.location || NIGERIAN_PROPERTY_FALLBACK.address,
+                        price: data.price || NIGERIAN_PROPERTY_FALLBACK.price,
+                        type: data.type || NIGERIAN_PROPERTY_FALLBACK.type,
+                        status: data.status || NIGERIAN_PROPERTY_FALLBACK.status,
+                        beds: data.beds ?? NIGERIAN_PROPERTY_FALLBACK.beds,
+                        baths: data.baths ?? NIGERIAN_PROPERTY_FALLBACK.baths,
+                        sqft: data.sqft ?? NIGERIAN_PROPERTY_FALLBACK.sqft,
+                        agentName: data.agentName || NIGERIAN_PROPERTY_FALLBACK.agentName,
+                        agentPhone: data.agentPhone || NIGERIAN_PROPERTY_FALLBACK.agentPhone,
+                        description: data.description || NIGERIAN_PROPERTY_FALLBACK.description,
+                    });
+                }
+            } catch (err) {
+                console.warn("Notice fetching property details:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        fetchProperty();
+    }, [id]);
 
     return (
         <main className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -45,19 +89,17 @@ function PropertyContent() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Main Content */}
                         <div className="lg:col-span-2">
-                            <PropertyOverview />
-                            <PropertyDescription />
+                            <PropertyOverview property={property} />
+                            <PropertyDescription description={property.description} />
                             <PropertyFeatures />
-
-                            {/* Placeholder for Map/Video */}
-                            <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-100 mb-8 h-64 flex items-center justify-center text-gray-400">
-                                Map Component Placeholder
-                            </div>
                         </div>
 
                         {/* Sidebar */}
                         <div className="lg:col-span-1">
-                            <PropertyAgentSidebar />
+                            <PropertyAgentSidebar
+                                agentName={property.agentName}
+                                agentPhone={property.agentPhone}
+                            />
                         </div>
                     </div>
                 </div>
@@ -70,7 +112,7 @@ function PropertyContent() {
 
 export default function PropertyPage() {
     return (
-        <Suspense fallback={<div className="p-20 text-center">Loading...</div>}>
+        <Suspense fallback={<div className="p-20 text-center text-gray-400 font-medium">Loading property details...</div>}>
             <PropertyContent />
         </Suspense>
     );

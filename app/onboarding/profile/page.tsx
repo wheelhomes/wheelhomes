@@ -6,6 +6,7 @@ import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { User, MapPin, Calendar, ArrowRight, Home } from "lucide-react";
 import NaijaStates from 'naija-state-local-government';
+import { isEmailVerifiedGlobally } from "@/lib/auth-helpers";
 
 interface OnboardingData {
     fullName: string;
@@ -52,7 +53,7 @@ export default function ProfileOnboardingPage() {
 
         const unsubscribe = auth.onAuthStateChanged(async (user) => {
             if (!user) {
-                router.push("/signin");
+                router.replace("/signin");
                 return;
             }
 
@@ -60,6 +61,11 @@ export default function ProfileOnboardingPage() {
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
+                    if (!isEmailVerifiedGlobally(user, data)) {
+                        router.replace("/verify-email");
+                        return;
+                    }
+
                     setFormData(prev => ({
                         ...prev,
                         fullName: data.fullName || user.displayName || "",
@@ -145,7 +151,7 @@ export default function ProfileOnboardingPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
+        <div className="min-h-screen bg-gray-50 pt-28 sm:pt-32 pb-16 px-4 sm:px-6 lg:px-8 font-sans">
             <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
                 {/* Header */}
                 <div className="bg-gray-900 px-8 py-6 text-white text-center">

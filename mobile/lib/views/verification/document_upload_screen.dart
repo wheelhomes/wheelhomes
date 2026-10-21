@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../core/image_helper.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
 import 'pending_approval_screen.dart';
@@ -28,6 +29,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
   // Form Fields
   final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _experienceController = TextEditingController();
+  final TextEditingController _coverageAreaController = TextEditingController();
   String _selectedCategory = 'General Maintenance';
   final List<File> _jobPhotoFiles = [];
   final List<String> _existingJobPhotoUrls = [];
@@ -103,6 +106,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       if (profile.idType != null && profile.idType!.isNotEmpty) {
         _selectedIdType = profile.idType!;
       }
+      if (profile.experience != null && profile.experience!.isNotEmpty && _experienceController.text.isEmpty) {
+        _experienceController.text = profile.experience!;
+      }
+      if (profile.coverageArea != null && profile.coverageArea!.isNotEmpty && _coverageAreaController.text.isEmpty) {
+        _coverageAreaController.text = profile.coverageArea!;
+      }
       if (profile.jobPhotos.isNotEmpty) {
         _existingJobPhotoUrls.addAll(profile.jobPhotos);
       }
@@ -116,6 +125,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   void dispose() {
     _pageController.dispose();
     _bioController.dispose();
+    _experienceController.dispose();
+    _coverageAreaController.dispose();
     super.dispose();
   }
 
@@ -432,6 +443,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         existingJobPhotoUrls: _existingJobPhotoUrls,
         bio: _bioController.text.trim(),
         serviceCategory: _selectedCategory,
+        experience: _experienceController.text.trim(),
+        coverageArea: _coverageAreaController.text.trim(),
       );
 
       if (!mounted) return;
@@ -681,11 +694,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     Color color;
     Color textColor;
     if (isDone) {
-      color = AppTheme.accent;
-      textColor = AppTheme.accent;
-    } else if (isCurrent) {
       color = AppTheme.primary;
       textColor = AppTheme.primary;
+    } else if (isCurrent) {
+      color = AppTheme.brandOrange;
+      textColor = AppTheme.brandOrange;
     } else {
       color = AppTheme.textSecondary.withValues(alpha: 0.4);
       textColor = AppTheme.textSecondary;
@@ -705,8 +718,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
             height: 20,
             decoration: BoxDecoration(
               color: isDone
-                  ? AppTheme.accent
-                  : (isCurrent ? AppTheme.primary : Colors.transparent),
+                  ? AppTheme.primary
+                  : (isCurrent ? AppTheme.brandOrange : Colors.transparent),
               border: Border.all(color: color, width: 1.5),
               shape: BoxShape.circle,
             ),
@@ -827,6 +840,77 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 },
               ),
             ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Years of Experience & Service Coverage Area
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Experience (Years)',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: TextField(
+                        controller: _experienceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. 5',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+                          border: InputBorder.none,
+                          icon: Icon(LucideIcons.calendar, size: 16, color: AppTheme.textSecondary),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 6,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Coverage Area',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: TextField(
+                        controller: _coverageAreaController,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. Lekki, Lagos Island',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+                          border: InputBorder.none,
+                          icon: Icon(LucideIcons.mapPin, size: 16, color: AppTheme.accent),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 20),
@@ -1867,10 +1951,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   color: Colors.grey[100],
                   child: localFile != null
                       ? Image.file(localFile, fit: BoxFit.cover)
-                      : Image.network(
-                          existingUrl!,
+                      : SafeImageHelper.buildImage(
+                          existingUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
+                          errorWidget: const Center(
                             child: Icon(LucideIcons.fileWarning, size: 40, color: Colors.grey),
                           ),
                         ),

@@ -74,7 +74,7 @@ interface ApplicationRecord {
 
 export default function AdminApprovalsPage() {
     // Navigation / View Tabs
-    const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'all'>('pending');
+    const [statusFilter, setStatusFilter] = useState<'pending' | 'onboarding' | 'approved' | 'all'>('pending');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -186,17 +186,17 @@ export default function AdminApprovalsPage() {
                 .filter(doc => {
                     const u = doc.data();
                     const rawStatus = (u.status || '').toLowerCase();
-                    // Do NOT show users who are still in onboarding (unverified).
-                    // Only show applications that have been submitted (pending_review)
-                    // or already reviewed (approved, rejected, restricted).
-                    return rawStatus === 'pending_review' || rawStatus === 'approved' || rawStatus === 'rejected' || rawStatus === 'restricted';
+                    // Include users actively in onboarding (unverified) as well as submitted/reviewed
+                    return rawStatus === 'pending_review' || rawStatus === 'unverified' || rawStatus === 'approved' || rawStatus === 'rejected' || rawStatus === 'restricted';
                 })
                 .map(doc => {
                     const u = doc.data();
-                    const rawStatus = (u.status || 'pending_review').toLowerCase();
+                    const rawStatus = (u.status || 'unverified').toLowerCase();
                     let normalizedStatus = rawStatus;
                     if (rawStatus === 'pending_review') {
                         normalizedStatus = 'pending';
+                    } else if (rawStatus === 'unverified') {
+                        normalizedStatus = 'onboarding';
                     }
 
                     const appData = u.applicationData || {};
@@ -287,13 +287,13 @@ export default function AdminApprovalsPage() {
                 if (em && emailSet.has(em)) continue;
 
                 const rawStatus = (u.status || '').toLowerCase();
-                // Exclude users still in onboarding (unverified)
-                if (rawStatus === 'unverified') continue;
-                if (!['pending_review', 'approved', 'rejected', 'restricted'].includes(rawStatus)) continue;
+                if (!['pending_review', 'unverified', 'approved', 'rejected', 'restricted'].includes(rawStatus)) continue;
 
                 let normalizedStatus = rawStatus;
                 if (rawStatus === 'pending_review') {
                     normalizedStatus = 'pending';
+                } else if (rawStatus === 'unverified') {
+                    normalizedStatus = 'onboarding';
                 }
                 const appData = u.applicationData || {};
                 const resolvedEmail = (u.email || appData.email || u.mail || "").trim();
@@ -343,6 +343,7 @@ export default function AdminApprovalsPage() {
 
     // Metric Calculations
     const pendingCount = applications.filter(a => a.status === 'pending').length;
+    const onboardingCount = applications.filter(a => a.status === 'onboarding').length;
     const approvedCount = applications.filter(a => a.status === 'approved').length;
     const rejectedCount = applications.filter(a => a.status === 'rejected').length;
 
@@ -735,6 +736,19 @@ export default function AdminApprovalsPage() {
                             </div>
                         </div>
 
+                        <div className="bg-sky-50/60 border border-sky-200/80 rounded-2xl p-4 flex items-center justify-between">
+                            <div>
+                                <span className="text-xs font-semibold uppercase tracking-wider text-sky-800">Live Onboarding</span>
+                                <h3 className="text-2xl font-extrabold text-sky-950 mt-0.5">{onboardingCount}</h3>
+                                <p className="text-[11px] text-sky-700 mt-0.5 flex items-center gap-1 font-medium">
+                                    <Smartphone className="w-3 h-3 text-sky-600" /> Completing onboarding on mobile
+                                </p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-700 shrink-0">
+                                <Smartphone className="w-6 h-6" />
+                            </div>
+                        </div>
+
                         <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4 flex items-center justify-between">
                             <div>
                                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Approved Pros</span>
@@ -758,19 +772,6 @@ export default function AdminApprovalsPage() {
                             </div>
                             <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-700 shrink-0">
                                 <XCircle className="w-6 h-6" />
-                            </div>
-                        </div>
-
-                        <div className="bg-blue-50/60 border border-blue-200/80 rounded-2xl p-4 flex items-center justify-between">
-                            <div>
-                                <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">Review Turnaround</span>
-                                <h3 className="text-2xl font-extrabold text-blue-950 mt-0.5">&lt; 24 Hrs</h3>
-                                <p className="text-[11px] text-blue-700 mt-0.5 flex items-center gap-1 font-medium">
-                                    <Sparkles className="w-3 h-3 text-blue-600" /> Platform quality standard
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-700 shrink-0">
-                                <ShieldCheck className="w-6 h-6" />
                             </div>
                         </div>
                     </div>
@@ -836,6 +837,19 @@ export default function AdminApprovalsPage() {
                             {pendingCount > 0 && (
                                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
                                     {pendingCount}
+                                </span>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={() => setStatusFilter('onboarding')}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${statusFilter === 'onboarding' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        >
+                            <Smartphone className="w-3.5 h-3.5 text-sky-500" />
+                            Live Onboarding
+                            {onboardingCount > 0 && (
+                                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-sky-500 text-white animate-pulse">
+                                    {onboardingCount}
                                 </span>
                             )}
                         </button>
@@ -938,6 +952,7 @@ export default function AdminApprovalsPage() {
                     <div className="space-y-4">
                         {filteredApps.map((app) => {
                             const isPending = app.status === 'pending';
+                            const isOnboarding = app.status === 'onboarding';
                             const isApproved = app.status === 'approved';
                             const isRejected = app.status === 'rejected';
                             const isCurrentProcessing = processingId === app.id;
@@ -948,7 +963,13 @@ export default function AdminApprovalsPage() {
                             return (
                                 <div
                                     key={app.id}
-                                    className={`bg-white rounded-2xl border transition-all duration-200 shadow-xs hover:shadow-md p-5 sm:p-6 ${isPending ? 'border-amber-200/80 ring-1 ring-amber-100/50' : 'border-slate-200'}`}
+                                    className={`bg-white rounded-2xl border transition-all duration-200 shadow-xs hover:shadow-md p-5 sm:p-6 ${
+                                        isPending
+                                            ? 'border-amber-200/80 ring-1 ring-amber-100/50'
+                                            : isOnboarding
+                                            ? 'border-sky-200/80 ring-1 ring-sky-100/50'
+                                            : 'border-slate-200'
+                                    }`}
                                 >
                                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
                                         {/* Candidate Profile Details */}
@@ -987,6 +1008,12 @@ export default function AdminApprovalsPage() {
                                                     </h3>
 
                                                     {/* Status Badge */}
+                                                    {isOnboarding && (
+                                                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping"></span>
+                                                            📱 Live Onboarding (Mobile App)
+                                                        </span>
+                                                    )}
                                                     {isPending && (
                                                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
                                                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>

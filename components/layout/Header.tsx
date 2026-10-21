@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, User, Phone, Plus, LogOut, Smartphone, Download } from "lucide-react";
+import { Menu, User, Phone, Plus, LogOut, Smartphone, Download, Briefcase, Clock, ShieldCheck } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 export default function Header() {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [userProfile, setUserProfile] = useState<any>(null);
     const router = useRouter();
     const pathname = usePathname();
 
     // Pages that should always have a solid/dark header
-    const alwaysSolidPages = ["/onboarding", "/signin", "/signup"];
-    const isSolid = isScrolled || alwaysSolidPages.includes(pathname);
+    const alwaysSolidPages = ["/onboarding", "/signin", "/signup", "/register", "/verify-email"];
+    const isSolid = isScrolled || alwaysSolidPages.some(p => pathname?.startsWith(p));
 
     useEffect(() => {
         const handleScroll = () => {
@@ -25,30 +28,77 @@ export default function Header() {
             }
         };
 
-        // Check login status
-        const checkLogin = () => {
-            const loggedIn = localStorage.getItem("isLoggedIn") === "true";
-            setIsLoggedIn(loggedIn);
-        }
-
-        checkLogin();
-
         window.addEventListener("scroll", handleScroll);
-        // Add event listener for storage changes to sync across tabs/windows or after login
-        window.addEventListener("storage", checkLogin);
+
+        let unsubDoc: (() => void) | null = null;
+        const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+            setCurrentUser(user);
+            if (unsubDoc) unsubDoc();
+
+            if (user) {
+                unsubDoc = onSnapshot(doc(db, "users", user.uid), (snap) => {
+                    if (snap.exists()) {
+                        setUserProfile(snap.data());
+                    } else {
+                        setUserProfile(null);
+                    }
+                });
+            } else {
+                setUserProfile(null);
+            }
+        });
 
         return () => {
             window.removeEventListener("scroll", handleScroll);
-            window.removeEventListener("storage", checkLogin);
+            if (unsubDoc) unsubDoc();
+            unsubscribeAuth();
         };
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem("isLoggedIn");
-        setIsLoggedIn(false);
-        router.push("/");
-        router.refresh(); // Refresh to ensure valid state
+    const handleLogout = async () => {
+        try {
+            await auth.signOut();
+            localStorage.clear();
+            setCurrentUser(null);
+            setUserProfile(null);
+            router.push("/");
+            router.refresh();
+        } catch (e) {
+            console.error("Logout error:", e);
+        }
     };
+
+    // Determine target dashboard link based on role and status
+    const getDashboardCta = () => {
+        if (!userProfile) return { href: "/dashboard", label: "Dashboard", badge: null };
+        const role = userProfile.role;
+        const status = userProfile.status;
+
+        if (role === 'admin') {
+            return { href: "/admin/dashboard", label: "Admin Portal", badge: "ADMIN" };
+        }
+        if (role === 'service_provider') {
+            if (status === 'pending_review' || status === 'pending') {
+                return { href: "/dashboard/pending", label: "Under Review", badge: "IN REVIEW" };
+            }
+            if (status === 'approved') {
+                return { href: "/dashboard/provider", label: "Job Hub", badge: "PRO" };
+            }
+            return { href: "/register/provider", label: "Complete KYC", badge: "ONBOARDING" };
+        }
+        if (role === 'agent') {
+            if (status === 'approved') return { href: "/dashboard/agent", label: "Agent Portal", badge: "AGENT" };
+            return { href: "/dashboard/pending", label: "Agent Review", badge: "IN REVIEW" };
+        }
+        // Client / default user
+        if (status === 'unverified') {
+            return { href: "/onboarding/profile", label: "Complete Profile", badge: "SETUP" };
+        }
+        return { href: "/dashboard/user", label: "Client Hub", badge: null };
+    };
+
+    const cta = getDashboardCta();
+    const isLoggedIn = !!currentUser;
 
     return (
         <header
@@ -92,26 +142,48 @@ export default function Header() {
 
                     {!isLoggedIn ? (
                         <>
-                            <Link href="/onboarding" className={`font-medium hover:text-primary transition-colors ${isSolid ? "text-gray-700" : "text-white"}`}>
+                            <Link href="/signin" className={`font-medium hover:text-primary transition-colors ${isSolid ? "text-gray-700" : "text-white"}`}>
                                 Login
                             </Link>
                             <span className={`${isSolid ? "text-gray-300" : "text-white/30"}`}>/</span>
-                            <Link href="/onboarding" className={`font-medium hover:text-primary transition-colors ${isSolid ? "text-gray-700" : "text-white"}`}>
+                            <Link href="/signup" className={`font-medium hover:text-primary transition-colors ${isSolid ? "text-gray-700" : "text-white"}`}>
                                 Sign Up
                             </Link>
                         </>
                     ) : (
-                        <>
-                            <Link href="/dashboard" className={`flex items-center gap-2 font-medium hover:text-primary transition-colors ${isSolid ? "text-gray-700" : "text-white"}`}>
-                                <User className="w-5 h-5" /> Dashboard
+                        <div className="flex items-center gap-2">
+                            <Link
+                                href={cta.href}
+                                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+                                    userProfile?.status === 'unverified' && userProfile?.role === 'service_provider'
+                                        ? "bg-amber-500 text-white hover:bg-amber-600 animate-pulse"
+                                        : userProfile?.status === 'pending_review' || userProfile?.status === 'pending'
+                                        ? "bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200"
+                                        : isSolid
+                                        ? "bg-accent text-white hover:opacity-90"
+                                        : "bg-white/10 text-white border border-white/20 hover:bg-white/20"
+                                }`}
+                            >
+                                <User className="w-3.5 h-3.5" />
+                                <span className="truncate max-w-[130px]">
+                                    {userProfile?.fullName?.split(' ')[0] || "Account"}
+                                </span>
+                                {cta.badge && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-black/20 text-white">
+                                        {cta.badge}
+                                    </span>
+                                )}
                             </Link>
                             <button
                                 onClick={handleLogout}
-                                className={`flex items-center gap-2 hover:text-red-500 transition-colors font-medium ${isSolid ? "text-gray-700" : "text-white"}`}
+                                title="Sign Out"
+                                className={`p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors ${
+                                    isSolid ? "text-gray-600" : "text-white/80"
+                                }`}
                             >
-                                <LogOut className="w-5 h-5" />
+                                <LogOut className="w-4 h-4" />
                             </button>
-                        </>
+                        </div>
                     )}
                 </div>
 
@@ -148,18 +220,49 @@ export default function Header() {
                     <div className="flex flex-col gap-3 mt-2">
                         {!isLoggedIn ? (
                             <div className="flex items-center justify-center gap-4 py-3 bg-gray-50 rounded-lg">
-                                <Link href="/onboarding" className="font-bold text-gray-700 hover:text-primary">
+                                <Link
+                                    href="/signin"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="font-bold text-gray-700 hover:text-primary"
+                                >
                                     Login
                                 </Link>
                                 <span className="text-gray-300">/</span>
-                                <Link href="/onboarding" className="font-bold text-gray-700 hover:text-primary">
+                                <Link
+                                    href="/signup"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="font-bold text-gray-700 hover:text-primary"
+                                >
                                     Sign Up
                                 </Link>
                             </div>
                         ) : (
-                            <Link href="/dashboard" className="w-full py-3 rounded-lg bg-accent text-white text-center font-bold">
-                                Go to Dashboard
-                            </Link>
+                            <div className="flex flex-col gap-2">
+                                <Link
+                                    href={cta.href}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="w-full py-3 px-4 rounded-xl bg-accent text-white font-bold flex items-center justify-between shadow-sm"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <User className="w-4 h-4" />
+                                        <span>{cta.label} ({userProfile?.fullName?.split(' ')[0] || 'User'})</span>
+                                    </div>
+                                    {cta.badge && (
+                                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-white/20">
+                                            {cta.badge}
+                                        </span>
+                                    )}
+                                </Link>
+                                <button
+                                    onClick={() => {
+                                        setIsMobileMenuOpen(false);
+                                        handleLogout();
+                                    }}
+                                    className="w-full py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <LogOut className="w-4 h-4" /> Sign Out
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>

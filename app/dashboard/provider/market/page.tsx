@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Search, Briefcase, MapPin, Clock, Filter, CheckCircle, ArrowRight } from "lucide-react";
-import { db } from "../../../../lib/firebase";
+import { db, auth } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { JobRequest } from "../../../../components/dashboard/provider/types";
+import { formatJobLocation } from "@/lib/job-utils";
 
 export default function MarketPage() {
     const router = useRouter();
@@ -15,8 +16,8 @@ export default function MarketPage() {
     const [filterCategory, setFilterCategory] = useState("all");
 
     useEffect(() => {
-        const verifyProvider = async () => {
-            const storedId = localStorage.getItem("tempUserId");
+        const unsubscribeAuth = auth.onAuthStateChanged(async (currentUser) => {
+            const storedId = currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem("tempUserId") : null);
             if (!storedId) {
                 router.push("/signin");
                 return;
@@ -28,10 +29,8 @@ export default function MarketPage() {
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     if (data.status !== 'approved') {
-                        if (data.status === 'pending_review' || data.status === 'pending') {
+                        if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
-                        } else if (data.status === 'rejected' || data.status === 'restricted') {
-                            router.replace("/settings/verification");
                         } else {
                             router.replace("/register/provider");
                         }
@@ -40,37 +39,65 @@ export default function MarketPage() {
             } catch (e) {
                 console.error("Error verifying provider status in market:", e);
             }
-        };
+        });
 
-        verifyProvider();
+        return () => unsubscribeAuth();
     }, [router]);
 
     useEffect(() => {
-        // Query for OPEN jobs
-        const q = query(
-            collection(db, "job_requests"),
-            where("status", "==", "open")
-            // orderBy("createdAt", "desc") // Requires index, use client sort for now
-        );
+        let isSubscribed = true;
+        let unsubscribeDirect: (() => void) | null = null;
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedJobs: JobRequest[] = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as JobRequest));
+        const processDocs = (docs: any[]) => {
+            if (!isSubscribed) return;
+            const fetchedJobs: JobRequest[] = docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                } as JobRequest))
+                .filter(job => {
+                    // Only active open marketplace dispatches
+                    if (job.status !== "open") return false;
+                    if ((job as any).isArchived) return false;
+                    // Must not be already assigned to any provider
+                    if (job.providerId && job.providerId !== "") return false;
+                    // Must have a valid budget > 0
+                    const budget = Number(job.budget ?? (job as any).price);
+                    if (!budget || budget <= 0) return false;
+                    return true;
+                });
 
-            // Client side sort
             fetchedJobs.sort((a, b) => {
-                const dateA = new Date(a.createdAt).getTime();
-                const dateB = new Date(b.createdAt).getTime();
-                return dateB - dateA; // Newest first
+                const timeA = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+                const timeB = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
             });
 
             setJobs(fetchedJobs);
             setIsLoading(false);
-        });
+        };
 
-        return () => unsubscribe();
+        try {
+            const q = query(
+                collection(db, "job_requests"),
+                where("status", "==", "open")
+            );
+
+            unsubscribeDirect = onSnapshot(q, (snapshot) => {
+                processDocs(snapshot.docs);
+            }, (error) => {
+                console.warn("Marketplace query notice:", error);
+                setIsLoading(false);
+            });
+        } catch (e) {
+            console.warn("Market listener initialization notice:", e);
+            setIsLoading(false);
+        }
+
+        return () => {
+            isSubscribed = false;
+            if (unsubscribeDirect) unsubscribeDirect();
+        };
     }, []);
 
     const handleAcceptJob = async (job: JobRequest) => {
@@ -86,12 +113,19 @@ export default function MarketPage() {
             const confirm = window.confirm(`Are you sure you want to accept this ${job.serviceType} job?`);
             if (!confirm) return;
 
-            const jobRef = doc(db, "job_requests", job.id);
-            await updateDoc(jobRef, {
+            const nowIso = new Date().toISOString();
+            const updates = {
                 status: "accepted",
                 providerId: providerId,
-                acceptedAt: new Date().toISOString()
-            });
+                acceptedAt: nowIso
+            };
+
+            const jobRef = doc(db, "job_requests", job.id);
+            await updateDoc(jobRef, updates);
+            try {
+                await updateDoc(doc(db, "requests", job.id), updates);
+            } catch (_) {}
+
             // Job will vanish from list due to realtime listener
             router.push(`/dashboard/provider/jobs`); // Redirect to My Jobs
         } catch (error) {
@@ -158,17 +192,17 @@ export default function MarketPage() {
                                                 {job.urgency || "Normal"}
                                             </span>
                                             <span className="text-xs text-gray-400 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {new Date(job.createdAt).toLocaleDateString()}
+                                                <Clock className="w-3 h-3" /> {new Date(job.createdAt?.seconds ? job.createdAt.seconds * 1000 : (job.createdAt || Date.now())).toLocaleDateString()}
                                             </span>
                                         </div>
-                                        <div className="text-lg font-bold text-gray-900">₦{(job.budget || 0).toLocaleString()}</div>
+                                        <div className="text-lg font-bold text-gray-900">₦{((job.budget ?? (job as any).price) || 0).toLocaleString()}</div>
                                     </div>
 
                                     <h3 className="text-lg font-bold text-gray-900 mb-1">{job.serviceType}</h3>
                                     <p className="text-gray-600 text-sm mb-4 line-clamp-2">{job.description}</p>
 
                                     <div className="flex items-center gap-4 text-sm text-gray-500">
-                                        <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {job.location}</span>
+                                        <span className="flex items-center gap-1"><MapPin className="w-4 h-4 flex-shrink-0" /> {formatJobLocation(job.location)}</span>
                                         <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Verified Client</span>
                                     </div>
                                 </div>

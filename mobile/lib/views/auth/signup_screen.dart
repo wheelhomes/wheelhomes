@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../core/design_system/design_system.dart';
 import '../../core/app_snackbar.dart';
+import '../../core/app_logo.dart';
 import '../../providers/auth_provider.dart';
 
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({Key? key}) : super(key: key);
+  const SignUpScreen({super.key});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -149,8 +151,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Center(
+                  child: AppLogo(height: 56, alignment: Alignment.center),
+                ),
+                const SizedBox(height: 20),
                 Text(
-                  'Join Wheelhomes 🚀',
+                  'Join Wheel of Comfort 🚀',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 8),
@@ -322,19 +328,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 const SizedBox(height: 28),
 
                 // Submit Button
-                SizedBox(
-                  width: double.infinity,
+                BrandButton.primary(
+                  text: 'Create Account',
+                  isLoading: authProvider.isLoading,
+                  onPressed: _submit,
                   height: 52,
-                  child: ElevatedButton(
-                    onPressed: authProvider.isLoading ? null : _submit,
-                    child: authProvider.isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                          )
-                        : const Text('Create Account'),
-                  ),
                 ),
               ],
             ),

@@ -61,8 +61,31 @@ class AppSnackBar {
       accentColor: AppTheme.primary,
       backgroundColor: const Color(0xFF0F172A),
       iconBgColor: AppTheme.primary.withValues(alpha: 0.15),
-      iconColor: const Color(0xFF38BDF8),
+      iconColor: AppTheme.primary,
       duration: duration,
+    );
+  }
+
+  static void showWarning(
+    BuildContext context,
+    String message, {
+    String? title,
+    Duration duration = const Duration(seconds: 4),
+    VoidCallback? onAction,
+    String? actionLabel,
+  }) {
+    _showCustomSnackBar(
+      context: context,
+      message: message,
+      title: title ?? 'Important Notice',
+      icon: LucideIcons.alertTriangle,
+      accentColor: AppTheme.brandOrange,
+      backgroundColor: const Color(0xFF0F172A),
+      iconBgColor: AppTheme.brandOrange.withValues(alpha: 0.15),
+      iconColor: AppTheme.brandOrange,
+      duration: duration,
+      onAction: onAction,
+      actionLabel: actionLabel,
     );
   }
 

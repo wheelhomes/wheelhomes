@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+*.log
+lint_results.txt
+seed_log.txt
 
 # debug
 npm-debug.log*
@@ -43,3 +46,5 @@ next-env.d.ts
 # firebase
 .firebase/
 
+# local maintenance / scratch scripts
+scripts/*.mjs

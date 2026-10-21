@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Clock, CheckCircle, Star, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Briefcase, Clock, CheckCircle, Star, Award, ShieldCheck } from "lucide-react";
 
 interface StatsProps {
     stats: {
@@ -19,36 +19,36 @@ export default function StatsCards({ stats }: StatsProps) {
             value: stats.active,
             subtext: "Currently in progress",
             icon: Briefcase,
-            color: "text-orange-600", // Primary (Brand)
+            color: "text-orange-600",
             bg: "bg-orange-50",
-            trend: "On Track"
+            trend: stats.active > 0 ? "In Execution" : "Ready for Work"
         },
         {
             label: "Pending Requests",
             value: stats.pending,
             subtext: "Requires your attention",
             icon: Clock,
-            color: "text-yellow-600", // Warning/Waiting
+            color: "text-yellow-600",
             bg: "bg-yellow-50",
-            trend: "Action Needed"
+            trend: stats.pending > 0 ? "Action Needed" : "All Caught Up"
         },
         {
             label: "Completed Jobs",
             value: stats.completed,
             subtext: "Lifetime total",
             icon: CheckCircle,
-            color: "text-[#21C185]", // Secondary (Success)
+            color: "text-[#21C185]",
             bg: "bg-[#21C185]/10",
-            trend: "+12% this month"
+            trend: stats.completed > 0 ? `${stats.completed} Settled` : "Start Earning"
         },
         {
             label: "Average Rating",
-            value: stats.rating,
-            subtext: `From ${stats.ratingCount} reviews`,
+            value: typeof stats.rating === 'number' ? stats.rating.toFixed(1) : "5.0",
+            subtext: `From ${stats.ratingCount} verified reviews`,
             icon: Star,
-            color: "text-indigo-600", // Differentiate Rating
+            color: "text-indigo-600",
             bg: "bg-indigo-50",
-            trend: "Top Rated"
+            trend: stats.ratingCount > 0 ? "Verified Specialist" : "New Specialist"
         }
     ];
 
@@ -60,11 +60,9 @@ export default function StatsCards({ stats }: StatsProps) {
                         <div className={`p-3 rounded-xl ${card.bg} ${card.color}`}>
                             <card.icon className="w-6 h-6" />
                         </div>
-                        {i === 2 && (
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                                <ArrowUpRight className="w-3 h-3" /> 12%
-                            </div>
-                        )}
+                        <span className="text-[11px] font-bold text-gray-500 bg-gray-50 border border-gray-100 px-2.5 py-1 rounded-full">
+                            {card.trend}
+                        </span>
                     </div>
                     <div>
                         <h3 className="text-3xl font-bold text-gray-900 mb-1">{card.value}</h3>

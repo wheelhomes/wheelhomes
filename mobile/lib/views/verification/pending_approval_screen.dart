@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../core/design_system/design_system.dart';
+import '../../core/app_logo.dart';
 import '../../providers/auth_provider.dart';
 import 'document_upload_screen.dart';
 
@@ -22,6 +24,8 @@ class PendingApprovalScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: const AppLogo(height: 32, alignment: Alignment.center),
         // Only show a back arrow when this screen was pushed on top of another
         // (e.g. from Profile). As the root gate, there is nowhere to go back to.
         leading: Navigator.canPop(context)
@@ -53,11 +57,11 @@ class PendingApprovalScreen extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
-                    color: isRejected ? const Color(0xFFFEF2F2) : const Color(0xFFEFF6FF),
+                    color: isRejected ? AppTheme.errorLight : AppTheme.secondaryLight,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (isRejected ? AppTheme.error : AppTheme.primary).withValues(alpha: 0.15),
+                        color: (isRejected ? AppTheme.error : AppTheme.brandOrange).withValues(alpha: 0.2),
                         blurRadius: 40,
                         spreadRadius: 8,
                       ),
@@ -66,7 +70,7 @@ class PendingApprovalScreen extends StatelessWidget {
                   child: Icon(
                     isRejected ? LucideIcons.alertTriangle : LucideIcons.clockAlert,
                     size: 64,
-                    color: isRejected ? const Color(0xFFDC2626) : const Color(0xFF1D4ED8),
+                    color: isRejected ? AppTheme.error : AppTheme.brandOrange,
                   ),
                 ),
               ),
@@ -141,7 +145,7 @@ class PendingApprovalScreen extends StatelessWidget {
                       icon: isRejected ? LucideIcons.alertCircle : LucideIcons.shieldCheck,
                       label: 'Status',
                       value: isRejected ? 'Updates Required' : 'Pending Review',
-                      valueColor: isRejected ? const Color(0xFFDC2626) : const Color(0xFF1D4ED8),
+                      valueColor: isRejected ? AppTheme.error : AppTheme.brandOrange,
                     ),
                     if (isRejected && profile?.rejectionReason != null && profile!.rejectionReason!.isNotEmpty) ...[
                       const Divider(height: 20),

@@ -105,7 +105,7 @@ export default function RequestFormWizard({ initialCategory }: RequestFormWizard
                                     name="location"
                                     value={formData.location}
                                     onChange={handleChange}
-                                    placeholder="123 Main St, Apt 4B"
+                                    placeholder="e.g. 15 Admiralty Way, Lekki Phase 1, Lagos"
                                     className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
                                 />
                             </div>

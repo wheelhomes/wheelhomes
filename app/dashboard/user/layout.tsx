@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { User, LogOut, LayoutDashboard, Home, Bell, Settings, ChevronDown, Menu } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore";
 import Sidebar from "../../../components/dashboard/Sidebar";
@@ -14,6 +14,7 @@ export default function UserDashboardLayout({
     children: React.ReactNode;
 }) {
     const router = useRouter();
+    const pathname = usePathname();
     const [user, setUser] = useState<any>(null);
     const [userName, setUserName] = useState("");
     const [currentDate, setCurrentDate] = useState("");
@@ -66,6 +67,16 @@ export default function UserDashboardLayout({
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        if (data.role === 'service_provider') {
+                            if (pathname?.startsWith("/dashboard/user/settings")) {
+                                router.replace("/dashboard/provider/settings");
+                                return;
+                            }
+                            if (pathname === "/dashboard/user") {
+                                router.replace("/dashboard/provider");
+                                return;
+                            }
+                        }
                         setUserName(data.fullName || u.displayName || "User");
                     } else {
                         setUserName(u.displayName || "User");

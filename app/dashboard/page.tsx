@@ -4,38 +4,42 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
+import { resolveUserDestination } from "@/lib/auth-helpers";
 
 export default function DashboardRedirect() {
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // Fetch role
-                try {
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        const role = userData.role;
+        let unsubDoc: (() => void) | null = null;
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (unsubDoc) unsubDoc();
 
-                        if (role === 'service_provider') router.replace("/dashboard/provider");
-                        else if (role === 'agent') router.replace("/dashboard/agent");
-                        else if (role === 'admin') router.replace("/admin/dashboard");
-                        else router.replace("/dashboard/user");
-                    } else {
-                        // Default fallback
-                        router.replace("/dashboard/user");
-                    }
-                } catch (e) {
-                    router.replace("/dashboard/user");
-                }
-            } else {
+            if (!user) {
                 router.replace("/signin");
+                return;
             }
+
+            // Real-time listener: if user changes role or submits onboarding on mobile, dashboard reacts instantly
+            unsubDoc = onSnapshot(doc(db, "users", user.uid), (snap) => {
+                if (!snap.exists()) {
+                    router.replace("/dashboard/user");
+                    return;
+                }
+
+                const userData = snap.data();
+                const destination = resolveUserDestination(user, userData);
+                router.replace(destination);
+            }, (error) => {
+                console.error("Dashboard routing error:", error);
+                router.replace("/dashboard/user");
+            });
         });
 
-        return () => unsubscribe();
+        return () => {
+            if (unsubDoc) unsubDoc();
+            unsubscribe();
+        };
     }, [router]);
 
     return (

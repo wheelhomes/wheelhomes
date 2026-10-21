@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, LogOut, Shield, FileText, Users, Building2, CreditCard } from "lucide-react";
+import { LayoutDashboard, LogOut, Shield, FileText, Users, Building2, CreditCard, Sparkles } from "lucide-react";
 
 export default function AdminLayout({
     children,
@@ -23,26 +23,62 @@ export default function AdminLayout({
             return;
         }
 
-        const token = localStorage.getItem("adminToken");
-        if (!token) {
-            router.push("/admin/login");
-        } else {
-            setAuthorized(true);
-        }
+        let unsub: (() => void) | undefined;
+        let cancelled = false;
 
-        // Monitor Firebase Auth User
-        import("firebase/auth").then(({ getAuth }) => {
-            const auth = getAuth();
-            const unsub = auth.onAuthStateChanged(user => {
-                if (user) {
-                    setCurrentUserEmail(user.email);
-                } else {
+        (async () => {
+            const { getAuth, onAuthStateChanged } = await import("firebase/auth");
+            const { doc, getDoc, getFirestore } = await import("firebase/firestore");
+            const { auth: appAuth } = await import("../../lib/firebase");
+            const auth = appAuth || getAuth();
+            const db = getFirestore(auth.app);
+
+            unsub = onAuthStateChanged(auth, async (user) => {
+                if (cancelled) return;
+                if (!user) {
                     setCurrentUserEmail(null);
+                    setAuthorized(false);
+                    router.replace("/admin/login");
+                    return;
+                }
+                setCurrentUserEmail(user.email);
+
+                let isAdmin = false;
+                try {
+                    const tokenResult = await user.getIdTokenResult();
+                    if (tokenResult.claims.admin === true) isAdmin = true;
+                    if (!isAdmin) {
+                        const adminSnap = await getDoc(doc(db, "admins", user.uid));
+                        isAdmin = adminSnap.exists();
+                    }
+                    if (!isAdmin) {
+                        const userSnap = await getDoc(doc(db, "users", user.uid));
+                        isAdmin = userSnap.exists() && userSnap.data()?.role === "admin";
+                    }
+                    // TEMPORARY: mirrors firestore.rules isAdmin(); remove once admin claim/doc is set.
+                    if (!isAdmin && user.email && ["admin@wheelhomes.com", "admin@wheelofcomfort.com"].includes(user.email)) {
+                        isAdmin = true;
+                    }
+                } catch {
+                    isAdmin = false;
+                }
+
+                if (cancelled) return;
+                if (isAdmin) {
+                    setAuthorized(true);
+                } else {
+                    setAuthorized(false);
+                    router.replace("/admin/login");
                 }
             });
-            return () => unsub();
-        });
+        })();
+
+        return () => {
+            cancelled = true;
+            if (unsub) unsub();
+        };
     }, [pathname, router]);
+
 
     if (!authorized) return null;
 
@@ -68,6 +104,7 @@ export default function AdminLayout({
         { name: "Properties", icon: Building2, href: "/admin/properties" },
         { name: "Service Requests", icon: FileText, href: "/admin/requests" },
         { name: "Transactions & Escrow", icon: CreditCard, href: "/admin/transactions" },
+        { name: "Platform Updates", icon: Sparkles, href: "/admin/updates" },
     ];
 
     return (

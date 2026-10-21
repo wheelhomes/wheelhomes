@@ -2,237 +2,312 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ------------------------------------------------------------------
     // Helper Functions
+    // ------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
-    
+
+    function uid() {
+      return request.auth.uid;
+    }
+
     function isParticipant(userIds) {
       return isSignedIn() && (request.auth.uid in userIds);
     }
-    
-    // Check if user is an admin 
-    // Checks admins collection, users collection (role == 'admin'), or designated admin email
+
+    // Admin = custom claim, admins/{uid} doc, users/{uid}.role == 'admin',
+    // or (TEMPORARY legacy fallback) designated admin email.
+    // TODO: remove the email fallback once the admin claim / admins doc is set.
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.token.get('admin', false) == true ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        request.auth.token.email in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin') ||
+        request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
       );
     }
-    
-    // Check if user is an approved service provider
+
+    function userRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '')
+        : '';
+    }
+
     function isApprovedProvider() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'service_provider' &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'service_provider' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', '') == 'approved';
     }
 
-    // Basic PII Check (Best effort regex-like patterns)
-    // Firestore rules don't support full Regex, so we check for common indicators
-    // This is NOT perfect, client-side validation is the primary UX barrier.
-    function hasPII(text) {
-       // Check for '@' symbol as proxy for email
-       return text.matches('.*@.*'); 
-       // Note: Phone detection is too complex for robust Rules implementation without Regex
+    // Field-diff helpers (for update rules)
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    function noneChanged(keys) {
+      return !changedKeys().hasAny(keys);
+    }
+    function onlyChanged(keys) {
+      return changedKeys().hasOnly(keys);
     }
 
-    // --- CHATS COLLECTION ---
+    // Fields no non-admin may modify on a job document after creation.
+    // Escrow and payment state can ONLY be transitioned by Cloud Functions (Admin SDK) or Admins.
+    function jobIdentityLocked() {
+      return noneChanged([
+        'clientId', 'userId', 'createdAt',
+        'paymentStatus', 'escrowReference', 'escrowAmount',
+        'escrowTransactionId', 'escrowSecuredAt', 'paymentReleasedAt'
+      ]);
+    }
+
+    // The owning client of a job (supports both schemas)
+    function isJobOwner(data) {
+      return data.get('clientId', '') == request.auth.uid || data.get('userId', '') == request.auth.uid;
+    }
+
+    // Shared update logic for job_requests and requests
+    function canUpdateJob(data) {
+      return isSignedIn() && (
+        isAdmin() ||
+        // Client may update their own job details but cannot re-parent or alter escrow status
+        (isJobOwner(data) && jobIdentityLocked()) ||
+        // Assigned provider: cannot re-assign, re-price, or touch payment/escrow fields
+        (data.get('providerId', '') == request.auth.uid &&
+          noneChanged([
+            'clientId', 'userId', 'createdAt', 'providerId',
+            'price', 'budget',
+            'paymentStatus', 'escrowReference', 'escrowAmount',
+            'escrowTransactionId', 'escrowSecuredAt', 'paymentReleasedAt'
+          ])) ||
+        // Approved provider claiming an open/pending job for THEMSELVES only
+        (data.get('status', '') in ['open', 'pending'] &&
+          isApprovedProvider() &&
+          onlyChanged(['status', 'providerId', 'acceptedAt', 'assignedAt', 'updatedAt',
+                       'providerName', 'providerPhone', 'providerPhoto']) &&
+          request.resource.data.get('providerId', '') == request.auth.uid &&
+          request.resource.data.get('status', '') == 'accepted')
+      );
+    }
+
+    // ------------------------------------------------------------------
+    // CHATS
+    // ------------------------------------------------------------------
     match /chats/{chatId} {
-      // Read: Participants or Admins
       allow read: if isParticipant(resource.data.participants) || isAdmin();
-      
-      // Create: user must include themselves in participants
-      allow create: if isSignedIn() 
+
+      allow create: if isSignedIn()
+                    && request.resource.data.participants is list
+                    && request.resource.data.participants.size() <= 10
                     && request.resource.data.participants.hasAll([request.auth.uid])
                     && request.resource.data.keys().hasAll(['participants', 'createdAt', 'updatedAt']);
 
-      // Update: Participants can update (e.g., lastMessage)
-      allow update: if isParticipant(resource.data.participants);
+      // Participants may update (e.g. lastMessage) but can never alter who is in the chat
+      allow update: if isParticipant(resource.data.participants)
+                    && noneChanged(['participants']);
 
-      // --- MESSAGES SUBCOLLECTION ---
       match /messages/{messageId} {
         allow read: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants) || isAdmin();
-        
+
         allow create: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
                       && request.resource.data.senderId == request.auth.uid
-                      && request.resource.data.text.size() < 2000
-                      // Optional: Enforce PII check on server side too
-                      // && !hasPII(request.resource.data.text) 
-                      ;
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() < 2000;
+        // Messages are immutable
+        allow update, delete: if isAdmin();
       }
     }
-    
-    // --- USER APPLICATIONS (For existing Admin Panel) ---
+
+    // ------------------------------------------------------------------
+    // USER APPLICATIONS (Admin panel review queue)
+    // ------------------------------------------------------------------
     match /user_applications/{appId} {
-        // Only admins can read/write full applications
-        allow read, write: if isAdmin();
-        // Users can create their own application (if we had a user-side flow, mostly open for now or restricted)
-        allow create: if true; 
-    }
-    
-    // --- NOTIFICATIONS ---
-    match /notifications/{notificationId} {
-      // Allow users to read their own notifications (supports both userId and recipientId)
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.recipientId == request.auth.uid || 
-        resource.data.recipientId == 'admin' ||
-        resource.data.recipientId == 'all' ||
-        isAdmin()
-      );
-      
-      // Allow users to create notifications
+      allow read, write: if isAdmin();
+      // Must be signed in to submit an application (no anonymous spam)
       allow create: if isSignedIn();
+    }
 
-      // Allow users to update their own notification (mark as read)
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.recipientId == request.auth.uid ||
+    // ------------------------------------------------------------------
+    // NOTIFICATIONS
+    // ------------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (
+        resource.data.get('userId', '') == request.auth.uid ||
+        resource.data.get('recipientId', '') == request.auth.uid ||
+        resource.data.get('recipientId', '') == 'all' ||
         isAdmin()
       );
+
+      // Clients notify counterparties (e.g. job accepted). Broadcast ('all'/'admin')
+      // notifications are admin-only so users can't spoof platform announcements.
+      allow create: if isSignedIn()
+                    && !(request.resource.data.get('recipientId', '') in ['all', 'admin'])
+                    && (request.resource.data.get('title', '') is string)
+                    && (request.resource.data.get('title', '').size() < 200)
+                    || isAdmin();
+
+      // Recipient may only flip read flags
+      allow update: if isSignedIn() && (
+        ((resource.data.get('userId', '') == request.auth.uid ||
+          resource.data.get('recipientId', '') == request.auth.uid) &&
+         onlyChanged(['isRead', 'read', 'readAt'])) ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
     }
-    
-    // --- SERVICE REQUESTS (Mobile & Unified Marketplace) ---
+
+    // ------------------------------------------------------------------
+    // SERVICE REQUESTS (Mobile & unified marketplace)
+    // ------------------------------------------------------------------
     match /requests/{requestId} {
-      // Read: Client, Assigned Provider, Pending marketplace, or Admin
       allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid || 
-        resource.data.status == 'pending' ||
+        resource.data.get('userId', '') == request.auth.uid ||
+        resource.data.get('providerId', '') == request.auth.uid ||
+        resource.data.get('status', '') in ['pending', 'open'] ||
         isAdmin()
       );
 
-      // Create: User must be creator
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.get('paymentStatus', 'unpaid') == 'unpaid';
 
-      // Update: Client, Assigned Provider, Approved Provider claiming job, or Admin
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid ||
-        (resource.data.status == 'pending' && isApprovedProvider()) ||
-        isAdmin()
-      );
+      allow update: if canUpdateJob(resource.data);
+
+      allow delete: if isAdmin();
     }
 
-    // --- JOB REQUESTS (Web compatibility) ---
+    // ------------------------------------------------------------------
+    // JOB REQUESTS (Web + shared)
+    // ------------------------------------------------------------------
     match /job_requests/{requestId} {
-      // Read: 
-      // 1. Owner (Client)
-      // 2. Assigned Provider
-      // 3. Pending/Open requests (Marketplace - open to all auth users)
-      // 4. Admins
       allow read: if isSignedIn() && (
-        resource.data.clientId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid || 
-        resource.data.status == 'pending' ||
-        resource.data.status == 'open' ||
-        (resource.data.invitedProviderIds is list && request.auth.uid in resource.data.invitedProviderIds) ||
+        resource.data.get('clientId', '') == request.auth.uid ||
+        resource.data.get('providerId', '') == request.auth.uid ||
+        resource.data.get('status', '') in ['pending', 'open'] ||
+        (resource.data.get('invitedProviderIds', []) is list &&
+         resource.data.get('invitedProviderIds', []).hasAny([request.auth.uid])) ||
         isAdmin()
       );
 
-      // Create: user must match clientId
-      allow create: if isSignedIn() && request.resource.data.clientId == request.auth.uid;
+      allow create: if isSignedIn()
+                    && request.resource.data.clientId == request.auth.uid
+                    && request.resource.data.get('paymentStatus', 'unpaid') == 'unpaid';
 
-      // Update: Client (owner), Approved Provider (assigned or claiming open job), or Admin
-      allow update: if isSignedIn() && (
-        resource.data.clientId == request.auth.uid || 
-        (resource.data.providerId == request.auth.uid && isApprovedProvider()) ||
-        (resource.data.status == 'open' && isApprovedProvider()) ||
-        isAdmin()
-      );
+      allow update: if canUpdateJob(resource.data);
 
-      // --- MESSAGES SUBCOLLECTION (For UnifiedChat) ---
+      allow delete: if isAdmin();
+
       match /messages/{messageId} {
-         allow read, create: if isSignedIn() && (
-           get(/databases/$(database)/documents/job_requests/$(requestId)).data.clientId == request.auth.uid ||
-           get(/databases/$(database)/documents/job_requests/$(requestId)).data.providerId == request.auth.uid ||
-           isAdmin()
-         );
+        allow read, create: if isSignedIn() && (
+          get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('clientId', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('providerId', '') == request.auth.uid ||
+          isAdmin()
+        );
       }
     }
 
-    // --- PROPERTIES (Real Estate Listings) ---
+    // ------------------------------------------------------------------
+    // PROPERTIES (Real estate listings)
+    // ------------------------------------------------------------------
     match /properties/{propertyId} {
-      // Public / All authenticated users can view active property listings
       allow read: if true;
 
-      // Only signed-in users (agents/admins) can list properties
-      allow create: if isSignedIn();
+      // Only agents/admins may list properties
+      allow create: if isSignedIn() && (isAdmin() || userRole() == 'agent');
 
-      // Only agent creator or admin can edit/update listings
-      allow update, delete: if isSignedIn() && (
-        resource.data.agentId == request.auth.uid ||
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-    }
-
-    // --- TRANSACTIONS & ESCROW AUDIT ---
-    match /transactions/{transactionId} {
-      // Users can only view their own transactions; Admins can audit all
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      // Authenticated users can record transactions associated with their own UID
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-
-      // Updates (e.g. escrow status release) restricted to participants or admins
+      // Only the owning agent or an admin can edit/delete, and ownership can't be transferred
       allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
+        isAdmin() ||
+        ((resource.data.get('agentId', '') == request.auth.uid ||
+          resource.data.get('userId', '') == request.auth.uid) &&
+         noneChanged(['agentId', 'userId']))
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.get('agentId', '') == request.auth.uid ||
+        resource.data.get('userId', '') == request.auth.uid
       );
     }
 
-    // --- USERS ---
+    // ------------------------------------------------------------------
+    // TRANSACTIONS & ESCROW AUDIT
+    // Escrow lifecycle is managed exclusively server-side via Cloud Functions
+    // and verified Paystack HMAC-SHA512 webhooks. Clients have strictly
+    // READ-ONLY access to their own transactions.
+    // ------------------------------------------------------------------
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (
+        resource.data.get('userId', '') == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Clients CANNOT create or update transactions directly.
+      // Cloud Functions (Admin SDK) and Admin panel handle all mutations.
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // USERS
+    // ------------------------------------------------------------------
     match /users/{userId} {
-      // Users can read their own profile; Admins can read all profiles;
-      // Signed-in users can read service provider profiles (needed for marketplace/provider selection)
+      // Own profile, admins, or provider profiles (needed for marketplace)
       allow read: if isSignedIn() && (
         request.auth.uid == userId ||
         isAdmin() ||
-        resource.data.role == 'service_provider'
+        resource.data.get('role', '') == 'service_provider'
       );
 
-      // Create: Users can create their own profile upon registration,
-      // but cannot grant themselves admin rights or self-approve KYC as provider/agent
+      // Create: own profile only; cannot grant admin or self-approve, cannot forge emailVerified
       allow create: if isSignedIn() && request.auth.uid == userId
-                    && request.resource.data.role != 'admin'
-                    && (request.resource.data.role != 'service_provider' || request.resource.data.status != 'approved')
-                    && (request.resource.data.role != 'agent' || request.resource.data.status != 'approved');
+                    && request.resource.data.get('role', '') != 'admin'
+                    && request.resource.data.get('status', '') != 'approved'
+                    && request.resource.data.get('emailVerified', false) != true;
 
-      // Update: Users can update their profile information,
-      // but CANNOT make themselves admin, and CANNOT self-approve KYC status
+      // Update: own profile only. Cannot become admin, cannot self-approve,
+      // cannot change role once approved, and cannot touch admin-managed or verification fields.
       allow update: if isAdmin() || (
         isSignedIn() && request.auth.uid == userId
-        // Cannot grant admin role
-        && request.resource.data.role != 'admin'
-        // Service providers and agents cannot set status to 'approved'
-        && (
-          (request.resource.data.role != 'service_provider' && request.resource.data.role != 'agent') ||
-          request.resource.data.status != 'approved' ||
-          resource.data.status == 'approved'
-        )
+        && request.resource.data.get('role', '') != 'admin'
+        && (request.resource.data.get('status', '') != 'approved' || resource.data.get('status', '') == 'approved')
+        && (resource.data.get('status', '') != 'approved' || request.resource.data.get('role', '') == resource.data.get('role', ''))
+        && noneChanged([
+          'isAdmin', 'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason',
+          'suspended', 'isSuspended', 'rating', 'reviewCount', 'walletBalance', 'earnings',
+          'emailVerified', 'verificationOtp'
+        ])
       );
 
-      // Delete: Only admins can delete user records
       allow delete: if isAdmin();
 
-      // Subcollections (e.g. sensitive identity & KYC documents)
-      // Strictly private: ONLY the document owner or an admin can access
+      // Sensitive identity & KYC documents: owner or admin only
       match /documents/{docId} {
         allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
+
+      // Private authentication and OTP secrets: strictly inaccessible to ANY client SDK
+      match /private_auth/{docId} {
+        allow read, write: if false;
+      }
     }
 
-    // --- ADMINS COLLECTION ---
+    // ------------------------------------------------------------------
+    // ADMINS COLLECTION
+    // ------------------------------------------------------------------
     match /admins/{adminId} {
-        allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
-        allow write: if isAdmin();
+      allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // APP CONFIG & VERSIONING (Mobile APK & Web releases)
+    // ------------------------------------------------------------------
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

@@ -330,7 +330,7 @@ export function RequestWizard({ isOpen, onClose, initialCategory, initialDescrip
                                             type="text"
                                             value={location}
                                             onChange={e => setLocation(e.target.value)}
-                                            placeholder="e.g. 123 Main St, Lagos"
+                                            placeholder="e.g. 24 Adeola Odeku St, Victoria Island, Lagos"
                                             className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-green-500 shadow-sm"
                                         />
                                     </div>

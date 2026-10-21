@@ -7,6 +7,7 @@ import { FormEvent, useState } from "react";
 import { auth, db } from "../../lib/firebase";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { resolveUserDestination } from "../../lib/auth-helpers";
 
 export default function SignInPage() {
     const router = useRouter();
@@ -54,57 +55,15 @@ export default function SignInPage() {
             }
 
             const userData = userDoc.data();
-            const status = userData.status;
-            const role = userData.role;
 
-            // 3. Status Based Routing
-            if (status === 'rejected' || status === 'restricted') {
-                // Route to verification settings where they can review the reason and re-upload documents
-                router.push("/settings/verification");
-                return;
-            }
+            // Store session data for legacy components
+            localStorage.setItem("tempUserId", user.uid);
+            localStorage.setItem("userName", userData.fullName || "User");
 
-            if (status === 'pending_review' || status === 'pending') {
-                router.push("/dashboard/pending");
-                return;
-            }
-
-            if (status === 'unverified') {
-                if (role === 'pending_role_selection' || !role) {
-                    router.push("/role-selection");
-                } else if (!user.emailVerified) {
-                    router.push("/verify-email");
-                } else if (role === 'service_provider') {
-                    router.push("/register/provider");
-                } else {
-                    router.push("/onboarding/profile");
-                }
-                return;
-            }
-
-            if (status === 'verified') {
-                if (role === 'pending_role_selection' || !role) {
-                    router.push("/role-selection");
-                } else if (role === 'service_provider') {
-                    router.push("/register/provider");
-                } else {
-                    router.push("/dashboard/user");
-                }
-                return;
-            }
-
-            if (status === 'approved' || !status /* legacy users might not have status */) {
-                // Store session data for legacy components
-                localStorage.setItem("tempUserId", user.uid);
-                localStorage.setItem("userName", userData.fullName || "User");
-
-                // Role Routing
-                if (role === 'service_provider') router.push("/dashboard/provider");
-                else if (role === 'agent') router.push("/dashboard/agent");
-                else if (role === 'admin') router.push("/admin/dashboard");
-                else router.push("/dashboard/user"); // Normal user default
-                return;
-            }
+            // Global unified destination resolution
+            const destination = resolveUserDestination(user, userData);
+            router.replace(destination);
+            return;
 
         } catch (err: any) {
             console.error("Login error:", err);
@@ -112,6 +71,7 @@ export default function SignInPage() {
             if (err.code === 'auth/invalid-credential') msg = "Invalid email or password.";
             if (err.code === 'auth/user-not-found') msg = "No account found with this email.";
             if (err.code === 'auth/wrong-password') msg = "Incorrect password.";
+            if (err.code === 'auth/user-disabled') msg = "This account has been deactivated. Please contact Wheelhomes support.";
 
             setError({
                 type: "error",

@@ -29,26 +29,14 @@ class PaymentProvider extends ChangeNotifier {
   }
 
   Future<TransactionModel?> payEscrowDeposit({
-    required String userId,
     required String jobId,
-    required double amount,
-    required String title,
-    required String paymentMethod,
-    String description = '',
   }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final transaction = await _paymentService.processEscrowPayment(
-        userId: userId,
-        jobId: jobId,
-        amount: amount,
-        title: title,
-        paymentMethod: paymentMethod,
-        description: description,
-      );
+      final transaction = await _paymentService.processEscrowPayment(jobId: jobId);
       _isLoading = false;
       notifyListeners();
       return transaction;
@@ -61,7 +49,6 @@ class PaymentProvider extends ChangeNotifier {
   }
 
   Future<bool> releaseEscrowPayment({
-    required String transactionId,
     required String jobId,
   }) async {
     _isLoading = true;
@@ -69,10 +56,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _paymentService.releaseEscrow(
-        transactionId: transactionId,
-        jobId: jobId,
-      );
+      await _paymentService.releaseEscrow(jobId: jobId);
       _isLoading = false;
       notifyListeners();
       return true;

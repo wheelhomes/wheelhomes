@@ -9,12 +9,23 @@ service firebase.storage {
     
     // Verify file properties
     function validImageOrPdf() {
-      // Relaxed check for wider support, including generic octet-stream if metadata is missing, though client should set it.
-      return request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf';
+      return request.resource.contentType != null
+          && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
     
     function validSize() {
       return request.resource.size < 5 * 1024 * 1024; // 5MB limit
+    }
+
+    // Admin = claim, admins/{uid} doc, users role, or (TEMPORARY) legacy admin email
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('admin', false) == true ||
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin') ||
+        request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
+      );
     }
 
     // --- CHAT ATTACHMENTS ---
@@ -58,15 +69,17 @@ service firebase.storage {
 
     // --- JOB EVIDENCE ---
     match /job_evidence/{allPaths=**} {
-      allow read, write: if isSignedIn(); 
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+                   && validImageOrPdf()
+                   && validSize();
     }
 
     // --- PROVIDER DOCUMENTS ---
     // Identity verification docs (Gov ID, Passport)
     match /provider_docs/{userId}/{allPaths=**} {
-       // Allow the owner to upload/read their own docs
-       // Allow Admins to read (using a simple isSignedIn check for now as Admin Panel is authenticated)
-       allow read: if isSignedIn();
+       // Identity documents are strictly private: owner or admin only
+       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
        allow write: if isSignedIn() 
                     && request.auth.uid == userId
                     && validImageOrPdf()

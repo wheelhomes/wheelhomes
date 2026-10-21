@@ -10,6 +10,16 @@
             "region": "us-central1"
         }
     },
+    "functions": [
+        {
+            "source": "functions",
+            "codebase": "default",
+            "ignore": [
+                "node_modules",
+                ".git"
+            ]
+        }
+    ],
     "firestore": {
         "rules": "firestore.rules",
         "indexes": "firestore.indexes.json"

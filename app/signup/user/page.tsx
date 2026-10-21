@@ -95,10 +95,10 @@ export default function NormalUserSignupPage() {
                 </button>
                 <div className="text-center pt-6">
                     <h1 className="text-2xl font-semibold text-gray-900">
-                        Register as User
+                        Register as Client
                     </h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        Request services and maintenance
+                        Hire skilled technicians, request home maintenance, or find properties to buy or rent
                     </p>
                 </div>
             </div>
@@ -210,7 +210,7 @@ export default function NormalUserSignupPage() {
                         disabled={isLoading}
                         className="w-full bg-purple-600 text-white font-bold py-4 rounded-lg hover:bg-purple-700 transition-all shadow-md mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                        {isLoading ? "Submitting..." : "Register as Normal User"}
+                        {isLoading ? "Submitting..." : "Create Client Account"}
                     </button>
 
                 </form>

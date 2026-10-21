@@ -3,6 +3,7 @@ import {
     User, MapPin, MessageSquare, Phone, ArrowLeft,
     Briefcase, CheckCircle, Clock, Calendar, Check
 } from "lucide-react";
+import { formatJobLocation } from "@/lib/job-utils";
 
 interface JobDetailViewProps {
     job: JobRequest | null;
@@ -101,7 +102,7 @@ export const JobDetailView = ({
 
                     <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
                         <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
-                        <span className="truncate">{job.location}</span>
+                        <span className="truncate">{formatJobLocation(job.location)}</span>
                     </div>
                 </div>
 

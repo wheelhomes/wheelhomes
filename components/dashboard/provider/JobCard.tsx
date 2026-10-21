@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, MapPin, User, ChevronRight, Check, X, Play, ShieldCheck, AlertTriangle } from "lucide-react";
+import { formatJobLocation } from "@/lib/job-utils";
 
 interface JobCardProps {
     job: any;
@@ -60,8 +61,8 @@ export default function JobCard({ job, onAccept, onReject, onStart, onComplete }
                         <span className="font-medium">{job.clientName || "Client"}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <span className="truncate">{job.location || "No location provided"}</span>
+                        <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="truncate">{formatJobLocation(job.location)}</span>
                     </div>
                 </div>
 

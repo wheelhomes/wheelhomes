@@ -1,18 +1,17 @@
 [
     {
         "origin": [
-            "*"
+            "https://wheelofcomfort.vercel.app",
+            "https://wheelhomes.web.app",
+            "https://wheelhomes.firebaseapp.com",
+            "http://localhost:3000"
         ],
         "method": [
             "GET",
-            "HEAD",
-            "PUT",
-            "POST",
-            "DELETE"
+            "HEAD"
         ],
         "responseHeader": [
-            "Content-Type",
-            "Access-Control-Allow-Origin"
+            "Content-Type"
         ],
         "maxAgeSeconds": 3600
     }

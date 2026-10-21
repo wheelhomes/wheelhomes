@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 import RestrictedBanner from "@/components/layout/RestrictedBanner";
 import RestrictedGuard from "@/components/auth/RestrictedGuard";
 import PublicLayoutWrapper from "@/components/layout/PublicLayoutWrapper";
+import WebUpdateBanner from "@/components/layout/WebUpdateBanner";
 
 export default function RootLayout({
   children,
@@ -43,6 +44,7 @@ export default function RootLayout({
         className={`antialiased`}
       >
         <RestrictedBanner />
+        <WebUpdateBanner />
         <RestrictedGuard>
           <PublicLayoutWrapper>
             {children}

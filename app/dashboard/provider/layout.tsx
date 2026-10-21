@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore";
-import { Bell, LogOut, ChevronDown, Settings } from "lucide-react";
-import ProviderSidebar from "@/components/dashboard/ProviderSidebar";
+import { Bell, LogOut, ChevronDown, Settings, Menu, X } from "lucide-react";
+import ProviderSidebar, {
+    OPERATIONAL_MENU_ITEMS,
+    ACCOUNT_MENU_ITEMS,
+    PROVIDER_MENU_ITEMS
+} from "@/components/dashboard/ProviderSidebar";
 import Link from "next/link";
 
 export default function ProviderDashboardLayout({
@@ -14,9 +18,12 @@ export default function ProviderDashboardLayout({
     children: React.ReactNode;
 }) {
     const router = useRouter();
+    const pathname = usePathname();
     const [user, setUser] = useState<any>(null);
+    const [userProfile, setUserProfile] = useState<any>(null);
     const [userName, setUserName] = useState("");
     const [currentDate, setCurrentDate] = useState("");
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Notification State
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -53,41 +60,75 @@ export default function ProviderDashboardLayout({
         };
         document.addEventListener("mousedown", handleClickOutside);
 
+        let unsubProfile: (() => void) | null = null;
         const unsubscribe = auth.onAuthStateChanged(async (u) => {
+            if (unsubProfile) {
+                unsubProfile();
+                unsubProfile = null;
+            }
+
             if (u) {
                 setUser(u);
-                // Fetch user profile for registered name
-                try {
-                    const docRef = doc(db, "users", u.uid);
-                    const docSnap = await getDoc(docRef);
+                // Listen to user profile for real-time name and passportUrl changes
+                unsubProfile = onSnapshot(doc(db, "users", u.uid), (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        setUserProfile(data);
                         setUserName(data.fullName || u.displayName || "Partner");
                     } else {
                         setUserName(u.displayName || "Partner");
                     }
-                } catch (err) {
-                    console.error("Error fetching user name:", err);
+                }, (err) => {
+                    console.error("Error listening to user profile:", err);
                     setUserName(u.displayName || "Partner");
-                }
+                });
 
-                // Listen for Notifications
-                const notifQuery = query(
+                // Listen for Notifications (Single-value queries for 100% security rule and index compatibility)
+                const userNotifQuery = query(
                     collection(db, "notifications"),
-                    where("recipientId", "in", [u.uid, "all"]),
-                    orderBy("createdAt", "desc"),
+                    where("recipientId", "==", u.uid),
+                    limit(20)
+                );
+
+                const broadcastNotifQuery = query(
+                    collection(db, "notifications"),
+                    where("recipientId", "==", "all"),
                     limit(10)
                 );
 
-                const unsubscribeNotif = onSnapshot(notifQuery, (snapshot) => {
-                    const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setNotifications(notifs);
-                    setUnreadCount(notifs.filter((n: any) => !n.read).length);
-                });
+                let userNotifs: any[] = [];
+                let broadcastNotifs: any[] = [];
+
+                const updateNotifications = () => {
+                    const combined = [...userNotifs, ...broadcastNotifs];
+                    const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+
+                    unique.sort((a, b) => {
+                        const tA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                        const tB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+                        return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+                    });
+
+                    const final = unique.slice(0, 15);
+                    setNotifications(final);
+                    setUnreadCount(final.filter((n: any) => !n.read && !n.isRead).length);
+                };
+
+                const unsubscribeUserNotif = onSnapshot(userNotifQuery, (snapshot) => {
+                    userNotifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    updateNotifications();
+                }, (err) => console.warn("Provider user notification notice:", err));
+
+                const unsubscribeBroadcast = onSnapshot(broadcastNotifQuery, (snapshot) => {
+                    broadcastNotifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    updateNotifications();
+                }, (err) => console.warn("Provider broadcast notification notice:", err));
 
                 return () => {
-                    unsubscribeNotif();
-                }
+                    if (unsubProfile) unsubProfile();
+                    unsubscribeUserNotif();
+                    unsubscribeBroadcast();
+                };
 
             } else {
                 router.push("/signin");
@@ -108,19 +149,133 @@ export default function ProviderDashboardLayout({
     return (
         <div className="min-h-screen bg-gray-50 flex font-[family-name:var(--font-geist-mono)]">
 
-            {/* Sidebar - Fixed Layer */}
+            {/* Sidebar - Fixed Desktop Layer */}
             <ProviderSidebar />
 
-            {/* Main Content - Pushed Right */}
-            <main className="flex-1 lg:ml-64 w-full relative h-screen overflow-y-auto">
-                <header className="bg-white m-6 mb-0 rounded-xl p-4 flex items-center justify-between shadow-sm border border-gray-100 sticky top-6 z-20">
+            {/* Mobile Drawer Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden transition-opacity"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
+            {/* Mobile Drawer Sidebar */}
+            <div
+                className={`fixed inset-y-0 left-0 w-72 bg-white z-50 lg:hidden shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
+                    isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+                }`}
+            >
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <img src="/images/wheel logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+                        <div>
+                            <h1 className="text-base font-bold text-gray-900 leading-tight">Wheel of Comfort</h1>
+                            <p className="text-[10px] text-gray-500 font-medium">Service Partner Hub</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+                    {/* Operations */}
                     <div>
-                        <h1 className="text-xl font-bold text-gray-900">
-                            Welcome back, {userName} 👋
-                        </h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1">
-                            {currentDate}
-                        </p>
+                        <div className="px-3 mb-2">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                                Operations
+                            </span>
+                        </div>
+                        <div className="space-y-1">
+                            {OPERATIONAL_MENU_ITEMS.map((item) => {
+                                const active = item.path === "/dashboard/provider"
+                                    ? pathname === "/dashboard/provider"
+                                    : pathname?.startsWith(item.path);
+                                return (
+                                    <Link
+                                        key={item.id}
+                                        href={item.path}
+                                        onClick={() => setIsMobileMenuOpen(false)}
+                                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all font-medium text-sm ${
+                                            active
+                                                ? "bg-orange-50 text-orange-700 font-semibold shadow-xs"
+                                                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                        }`}
+                                    >
+                                        <item.icon className={`w-4.5 h-4.5 ${active ? "text-orange-600" : "text-gray-400"}`} />
+                                        <span>{item.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Reputation & Account */}
+                    <div>
+                        <div className="px-3 mb-2">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                                Reputation & Account
+                            </span>
+                        </div>
+                        <div className="space-y-1">
+                            {ACCOUNT_MENU_ITEMS.map((item) => {
+                                const active = item.path === "/dashboard/provider"
+                                    ? pathname === "/dashboard/provider"
+                                    : pathname?.startsWith(item.path);
+                                return (
+                                    <Link
+                                        key={item.id}
+                                        href={item.path}
+                                        onClick={() => setIsMobileMenuOpen(false)}
+                                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all font-medium text-sm ${
+                                            active
+                                                ? "bg-orange-50 text-orange-700 font-semibold shadow-xs"
+                                                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                        }`}
+                                    >
+                                        <item.icon className={`w-4.5 h-4.5 ${active ? "text-orange-600" : "text-gray-400"}`} />
+                                        <span>{item.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </nav>
+
+                <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-xl transition-colors font-semibold text-xs cursor-pointer"
+                    >
+                        <LogOut className="w-4 h-4" />
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Content - Pushed Right on Desktop */}
+            <main className="flex-1 lg:ml-64 w-full relative h-screen overflow-y-auto">
+                <header className="bg-white m-4 sm:m-6 mb-0 rounded-xl p-4 flex items-center justify-between shadow-sm border border-gray-100 sticky top-4 sm:top-6 z-20">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            className="lg:hidden p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                            aria-label="Toggle navigation menu"
+                        >
+                            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                        </button>
+                        <div>
+                            <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate max-w-[180px] sm:max-w-none">
+                                Welcome back, {userName} 👋
+                            </h1>
+                            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">
+                                {currentDate}
+                            </p>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -179,9 +334,13 @@ export default function ProviderDashboardLayout({
                                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                                 className="flex items-center gap-2 focus:outline-none group"
                             >
-                                <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center font-bold text-sm shadow-md group-hover:shadow-lg transition-all">
-                                    {user?.photoURL ? (
-                                        <img src={user.photoURL} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                                <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center font-bold text-sm shadow-md group-hover:shadow-lg transition-all overflow-hidden">
+                                    {userProfile?.photoURL || userProfile?.passportUrl || userProfile?.applicationData?.passportUrl || user?.photoURL ? (
+                                        <img
+                                            src={userProfile?.photoURL || userProfile?.passportUrl || userProfile?.applicationData?.passportUrl || user?.photoURL}
+                                            alt="Profile"
+                                            className="w-full h-full rounded-full object-cover"
+                                        />
                                     ) : (
                                         getInitials(userName || "Partner")
                                     )}
@@ -202,12 +361,12 @@ export default function ProviderDashboardLayout({
                                     </div>
 
                                     <Link
-                                        href="/dashboard/user/settings"
+                                        href="/dashboard/provider/settings"
                                         className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                                         onClick={() => setShowProfileMenu(false)}
                                     >
                                         <Settings className="w-4 h-4" />
-                                        Settings
+                                        Account Settings
                                     </Link>
 
                                     <div className="border-t border-gray-50 my-1"></div>

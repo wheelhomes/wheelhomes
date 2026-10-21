@@ -1,5 +1,6 @@
 import { JobRequest } from "./types";
 import { Briefcase, MapPin, Clock, ChevronRight } from "lucide-react";
+import { formatJobLocation } from "@/lib/job-utils";
 
 // Helper for relative time (since date-fns is not installed)
 const timeAgo = (date: any) => {
@@ -78,7 +79,7 @@ export const JobListItem = ({ job, isSelected, onClick }: JobListItemProps) => {
                 <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span className="flex items-center gap-1 truncate max-w-[120px]">
                         <MapPin className="w-3 h-3 text-gray-400" />
-                        {job.location}
+                        {formatJobLocation(job.location)}
                     </span>
                     <span className={`
                         px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide

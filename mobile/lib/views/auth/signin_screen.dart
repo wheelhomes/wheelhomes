@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../core/theme.dart';
+import '../../core/design_system/design_system.dart';
 import '../../core/app_snackbar.dart';
+import '../../core/app_logo.dart';
 import '../../providers/auth_provider.dart';
 import 'signup_screen.dart';
 
@@ -257,30 +258,11 @@ class _SignInScreenState extends State<SignInScreen> {
               children: [
                 const SizedBox(height: 24),
 
-                // Brand Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(LucideIcons.home,
-                          color: AppTheme.primary, size: 26),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Wheelhomes',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: AppTheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                    ),
-                  ],
+                // Brand Header with Official Logo
+                const Center(
+                  child: AppLogo(height: 60, alignment: Alignment.center),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
 
                 Text(
                   'Welcome Back 👋',
@@ -451,22 +433,11 @@ class _SignInScreenState extends State<SignInScreen> {
                 const SizedBox(height: 24),
 
                 // Submit Button
-                SizedBox(
-                  width: double.infinity,
+                BrandButton.primary(
+                  text: 'Sign In',
+                  isLoading: authProvider.isLoading,
+                  onPressed: _submit,
                   height: 52,
-                  child: ElevatedButton(
-                    onPressed: authProvider.isLoading ? null : _submit,
-                    child: authProvider.isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text('Sign In'),
-                  ),
                 ),
                 const SizedBox(height: 32),
 
@@ -489,7 +460,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       child: const Text(
                         'Sign Up',
                         style: TextStyle(
-                          color: AppTheme.primary,
+                          color: AppTheme.brandOrange,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

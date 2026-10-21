@@ -9,7 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/request_provider.dart';
 
 class CreateRequestScreen extends StatefulWidget {
-  const CreateRequestScreen({Key? key}) : super(key: key);
+  const CreateRequestScreen({super.key});
 
   @override
   State<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -113,7 +113,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.1),
+                    color: AppTheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(LucideIcons.camera, color: AppTheme.primary),
@@ -128,7 +128,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.1),
+                    color: AppTheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(LucideIcons.image, color: AppTheme.primary),
@@ -253,7 +253,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 Text('Service Category', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 14)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedService,
+                  initialValue: _selectedService,
                   items: _services.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                   onChanged: (val) => setState(() => _selectedService = val!),
                   decoration: const InputDecoration(
@@ -314,7 +314,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                             decoration: BoxDecoration(
                               color: AppTheme.background,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.primary.withOpacity(0.4), width: 1.5),
+                              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4), width: 1.5),
                             ),
                             child: const Column(
                               mainAxisAlignment: MainAxisAlignment.center,

@@ -13,7 +13,7 @@ import {
     or,
     addDoc
 } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { db, auth } from "../../../lib/firebase";
 import { sendNotification, sendAdminAlert } from "../../../lib/notifications";
 
 import { Bell, AlertTriangle } from "lucide-react";
@@ -43,6 +43,7 @@ export default function ProviderDashboard() {
     const router = useRouter();
     const [providerId, setProviderId] = useState<string | null>(null);
     const [providerName, setProviderName] = useState("Partner");
+    const [providerProfile, setProviderProfile] = useState<any>(null);
     const [jobs, setJobs] = useState<JobRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRejected, setIsRejected] = useState(false);
@@ -57,43 +58,45 @@ export default function ProviderDashboard() {
 
     // --- INITIALIZATION ---
     useEffect(() => {
-        const storedId = localStorage.getItem("tempUserId");
-        const storedRole = localStorage.getItem("userRole");
+        let unsubUser: (() => void) | null = null;
+        const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
+            const storedId = currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem("tempUserId") : null);
 
-        // Security Check: Ensure only providers access this
-        if (!storedId) {
-            router.push("/signin");
-            return;
-        }
+            if (unsubUser) unsubUser();
 
-        setProviderId(storedId);
+            // Security Check: Ensure only providers access this
+            if (!storedId) {
+                router.push("/signin");
+                return;
+            }
 
-        // Fetch Provider Name & Status
-        const fetchProfile = async () => {
-            try {
-                const userDoc = await getDoc(doc(db, "users", storedId));
+            setProviderId(storedId);
+
+            // Real-time Provider Profile & Status Listener
+            unsubUser = onSnapshot(doc(db, "users", storedId), (userDoc) => {
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     if (data.status !== 'approved') {
-                        if (data.status === 'pending_review' || data.status === 'pending') {
+                        if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
-                            return;
-                        } else if (data.status === 'rejected' || data.status === 'restricted') {
-                            router.replace("/settings/verification");
                             return;
                         } else {
                             router.replace("/register/provider");
                             return;
                         }
                     }
+                    setProviderProfile(data);
                     setProviderName(data.fullName || "Partner");
                 }
-            } catch (e) {
+            }, (e) => {
                 console.error("Profile fetch error", e);
-            }
-        };
-        fetchProfile();
+            });
+        });
 
+        return () => {
+            if (unsubUser) unsubUser();
+            unsubscribeAuth();
+        };
     }, [router]);
 
     // --- DATA FETCHING ---
@@ -118,10 +121,15 @@ export default function ProviderDashboard() {
         const updateJobs = () => {
             // Merge by ID to prevent duplicates (though unlikely to overlap in valid state)
             const allJobs = [...directJobs, ...invitedJobs];
-            const uniqueJobs = Array.from(new Map(allJobs.map(item => [item.id, item])).values());
+            const nonArchivedJobs = allJobs.filter(j => !((j as any).isArchived) && (j.status as string) !== 'archived');
+            const uniqueJobs = Array.from(new Map(nonArchivedJobs.map(item => [item.id, item])).values());
 
-            // Sort by Date Descending
-            uniqueJobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            // Sort by Date Descending safely
+            uniqueJobs.sort((a, b) => {
+                const timeA = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+                const timeB = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
+            });
 
             setJobs(uniqueJobs);
             setIsLoading(false);
@@ -132,7 +140,10 @@ export default function ProviderDashboard() {
                 directJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
                 updateJobs();
             },
-            (error) => console.error("Error fetching direct jobs:", error)
+            (error) => {
+                console.warn("Notice fetching direct jobs:", error);
+                setIsLoading(false);
+            }
         );
 
         const unsubscribe2 = onSnapshot(q2,
@@ -140,7 +151,10 @@ export default function ProviderDashboard() {
                 invitedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
                 updateJobs();
             },
-            (error) => console.error("Error fetching invited jobs:", error)
+            (error) => {
+                console.warn("Notice fetching invited jobs:", error);
+                setIsLoading(false);
+            }
         );
 
         return () => {
@@ -151,19 +165,20 @@ export default function ProviderDashboard() {
 
 
     // --- CALCULATED STATS ---
+    const completedList = jobs.filter(j => ['fully_completed', 'completed'].includes(j.status));
     const stats = {
-        active: jobs.filter(j => ['accepted', 'in_progress'].includes(j.status)).length,
-        pending: jobs.filter(j => j.status === 'pending').length,
-        completed: jobs.filter(j => j.status === 'fully_completed').length,
-        rating: 4.8, // Placeholder until rating system is live
-        ratingCount: 128
+        active: jobs.filter(j => ['accepted', 'in_progress', 'partially_completed', 'awaiting_confirmation'].includes(j.status)).length,
+        pending: jobs.filter(j => ['pending', 'open'].includes(j.status)).length,
+        completed: completedList.length,
+        rating: providerProfile?.rating ?? 4.9,
+        ratingCount: providerProfile?.reviewCount ?? completedList.length
     };
 
     // --- FILTERS ---
     const filteredJobs = jobs.filter(job => {
-        if (activeTab === 'new') return job.status === 'pending';
+        if (activeTab === 'new') return ['pending', 'open'].includes(job.status);
         if (activeTab === 'active') return ['accepted', 'in_progress', 'partially_completed', 'awaiting_confirmation'].includes(job.status);
-        if (activeTab === 'completed') return ['fully_completed', 'cancelled', 'rejected'].includes(job.status);
+        if (activeTab === 'completed') return ['fully_completed', 'completed', 'cancelled', 'rejected'].includes(job.status);
         return true;
     });
 
@@ -179,10 +194,21 @@ export default function ProviderDashboard() {
             }
 
             const job = jobs.find(j => j.id === jobId);
-            await updateDoc(doc(db, "job_requests", jobId), { status: 'accepted' });
+            const nowIso = new Date().toISOString();
+            const updates = {
+                status: 'accepted',
+                providerId: providerId,
+                acceptedAt: nowIso
+            };
 
-            if (job?.clientId) {
-                await sendNotification(job.clientId, "Job Accepted! 🎉", `Your request for ${job.serviceType} has been accepted.`, 'success');
+            await updateDoc(doc(db, "job_requests", jobId), updates);
+            try {
+                await updateDoc(doc(db, "requests", jobId), updates);
+            } catch (_) {}
+
+            const targetClient = job?.clientId || (job as any)?.userId;
+            if (targetClient && job) {
+                await sendNotification(targetClient, "Job Accepted! 🎉", `Your request for ${job.serviceType} has been accepted.`, 'success');
             }
         } catch (error) {
             console.error(error);
@@ -195,9 +221,13 @@ export default function ProviderDashboard() {
         try {
             const job = jobs.find(j => j.id === jobId);
             await updateDoc(doc(db, "job_requests", jobId), { status: 'rejected' });
+            try {
+                await updateDoc(doc(db, "requests", jobId), { status: 'rejected' });
+            } catch (_) {}
 
-            if (job?.clientId) {
-                await sendNotification(job.clientId, "Job Declined", `Provider unavailable for ${job.serviceType}.`, 'error');
+            const targetClient = job?.clientId || (job as any)?.userId;
+            if (targetClient && job) {
+                await sendNotification(targetClient, "Job Declined", `Provider unavailable for ${job.serviceType}.`, 'error');
             }
         } catch (error) {
             console.error(error);
@@ -208,12 +238,17 @@ export default function ProviderDashboard() {
     const handleStartJob = async (eta: string, note: string) => {
         if (!selectedJob) return;
         try {
-            await updateDoc(doc(db, "job_requests", selectedJob.id), {
+            const startUpdates = {
                 status: 'in_progress',
                 startTime: new Date().toISOString(),
                 estimatedDuration: eta,
-                startNote: note
-            });
+                startNote: note,
+                note: note
+            };
+            await updateDoc(doc(db, "job_requests", selectedJob.id), startUpdates);
+            try {
+                await updateDoc(doc(db, "requests", selectedJob.id), startUpdates);
+            } catch (_) {}
 
             if (selectedJob.clientId) {
                 await sendNotification(
@@ -233,20 +268,25 @@ export default function ProviderDashboard() {
     const handleCompleteJob = async (type: 'full' | 'partial', data?: any) => {
         if (!selectedJob) return;
         try {
+            const nowIso = new Date().toISOString();
             const updates: any = {
-                status: type === 'full' ? 'awaiting_confirmation' : 'partially_completed',
-                actualEndTime: new Date().toISOString()
+                status: type === 'full' ? 'fully_completed' : 'partially_completed',
+                actualEndTime: nowIso,
+                completedAt: nowIso
             };
 
             if (type === 'partial' && data) {
                 updates.completionDetails = {
                     reason: data.reason,
                     photoProof: data.photoProof,
-                    timestamp: new Date().toISOString()
+                    timestamp: nowIso
                 };
             }
 
             await updateDoc(doc(db, "job_requests", selectedJob.id), updates);
+            try {
+                await updateDoc(doc(db, "requests", selectedJob.id), updates);
+            } catch (_) {}
 
             // Notifications
             if (selectedJob.clientId) {

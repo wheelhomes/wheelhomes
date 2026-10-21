@@ -744,5 +744,82 @@ Web: ${baseUrl}
 `;
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 6. EMAIL VERIFICATION OTP & DIRECT LINK EMAIL
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const verificationCodeEmailTemplate = (name: string, otp: string, verifyUrl: string) => {
+  const content = `
+    <p style="font-size: 16px; color: #0F172A; margin: 0 0 16px 0;">Hello <strong>${name || 'there'}</strong>,</p>
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+      Welcome to <strong>Wheel of Comfort</strong>! To activate your account and verify your email address, please use the 6-digit verification code below:
+    </p>
+
+    <!-- OTP Code Display -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td align="center">
+          <div style="display: inline-block; background-color: #F8FAFC; border: 2px dashed #0284C7; border-radius: 12px; padding: 18px 40px;">
+            <span style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #0F172A; font-family: Courier, monospace;">
+              ${otp}
+            </span>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+      <tr>
+        <td align="center">
+          <a href="${verifyUrl}" style="display: inline-block; background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 14px; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 10px rgba(2, 132, 199, 0.3);">
+            Verify Account Instantly &rarr;
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size: 13px; color: #64748B; text-align: center; margin: 0 0 16px 0;">
+      ⏱️ This code will expire in <strong>15 minutes</strong>.
+    </p>
+
+    <p style="font-size: 12px; color: #94A3B8; text-align: center; margin-top: 24px;">
+      If you did not create an account with Wheel of Comfort, you can safely ignore this email.
+    </p>
+  `;
+
+  return emailWrapper({
+    title: 'Verify Your Email Address',
+    previewText: `Your Wheel of Comfort verification code is ${otp}.`,
+    subtitle: 'Activate your account',
+    badgeText: 'Account Activation',
+    badgeColor: 'blue',
+    bodyContent: content,
+  });
+};
+
+export const verificationCodeEmailText = (name: string, otp: string, verifyUrl: string) => {
+  const baseUrl = getAppBaseUrl();
+  return `
+Wheel of Comfort - Verify Your Email Address
+
+Hello ${name || 'there'},
+
+Welcome to Wheel of Comfort! To activate your account and verify your email address, please use the 6-digit verification code below:
+
+Verification Code: ${otp}
+
+Or verify directly by clicking this link:
+${verifyUrl}
+
+This code will expire in 15 minutes.
+If you did not create an account, you can safely ignore this email.
+
+Support: wheelofcomfort@gmail.com
+Web: ${baseUrl}
+
+© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+`;
+};
+
 
 
