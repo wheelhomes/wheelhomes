@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 // Current web application version and build stamp
-export const APP_VERSION = "1.0.1";
-export const BUILD_TIMESTAMP = 1729519200000;
+const APP_VERSION = "1.0.1";
+const BUILD_TIMESTAMP = 1729519200000;
 
 export async function GET() {
     return NextResponse.json({

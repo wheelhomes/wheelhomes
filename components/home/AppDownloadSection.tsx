@@ -56,7 +56,7 @@ export default function AppDownloadSection() {
                 className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-base shadow-xl shadow-primary/25 transition-all hover:scale-105"
               >
                 <Download className="w-5 h-5" />
-                <span>Download Android App (.APK)</span>
+                <span>Download Android App (21.8 MB)</span>
               </a>
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function AppDownloadSection() {
                     download="wheelofcomfort.apk"
                     className="w-full block py-2.5 rounded-xl bg-primary text-white text-center text-xs font-bold shadow-md hover:bg-primary/90 transition-colors"
                   >
-                    Download Standalone APK &rarr;
+                    Download Standalone APK (21.8 MB) &rarr;
                   </a>
                 </div>
               </div>
