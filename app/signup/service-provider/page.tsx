@@ -2,7 +2,7 @@
 
 import { useState, ChangeEvent, FormEvent, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, Info, Upload, Image as ImageIcon, Lock, Eye, EyeOff, AlertCircle, X } from "lucide-react";
+import { ChevronLeft, Info, Upload, Image as ImageIcon, Eye, EyeOff, AlertCircle, X } from "lucide-react";
 import { db } from "../../../lib/firebase";
 import { collection, query, where, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
 import { sendAdminAlert } from "../../../lib/notifications";

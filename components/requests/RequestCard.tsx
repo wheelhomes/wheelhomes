@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { RequestStatusBadge } from './RequestStatusBadge';
-import { Calendar, MapPin, ChevronRight, User, DollarSign } from 'lucide-react';
+import { Calendar, MapPin, ChevronRight, User } from 'lucide-react';
 import { formatJobLocation, formatJobBudget } from '@/lib/job-utils';
 
 export interface UserJobRequest {

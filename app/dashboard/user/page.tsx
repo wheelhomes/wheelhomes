@@ -3,22 +3,16 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, onSnapshot, orderBy, limit, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, limit, doc, updateDoc, getDoc } from "firebase/firestore";
 import {
-    Bell,
     Briefcase,
-    CreditCard,
     Droplet,
-    Paintbrush,
-    Plus,
     Wrench,
     Zap,
     Clock,
     CheckCircle,
     XCircle,
     AlertTriangle,
-    XCircle as CloseIcon,
-    Shield,
     Sparkles, // Cleaning
     Thermometer // HVAC
 } from "lucide-react";
@@ -26,8 +20,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { NotificationData } from "../../../lib/notifications";
 import ChatSheet from "../../../components/chat/ChatSheet";
-import { MessageSquare } from "lucide-react";
-import Sidebar from "../../../components/dashboard/Sidebar";
 import { JobCard } from "../../../components/dashboard/JobCard";
 import { RequestWizard } from "../../../components/request/RequestWizard";
 import MagicRequestInput from "../../../components/dashboard/MagicRequestInput";

@@ -8,7 +8,6 @@ import {
     Briefcase,
     MapPin,
     BadgeCheck,
-    Upload,
     ArrowRight,
     User,
     Camera,
@@ -17,7 +16,6 @@ import {
     CheckCircle2,
     AlertCircle,
     FileText,
-    ShieldCheck,
     Clock,
     Sparkles
 } from "lucide-react";

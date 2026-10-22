@@ -1,4 +1,3 @@
-import React from "react";
 import Link from "next/link";
 import { ArrowRight, Wrench, Building2, Paintbrush, Hammer, Zap, Droplet } from "lucide-react";
 import Container from "@/components/ui/Container";

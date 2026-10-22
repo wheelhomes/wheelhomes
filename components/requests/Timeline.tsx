@@ -1,6 +1,5 @@
 import React from 'react';
 import { Check, Circle, Clock } from 'lucide-react';
-import { RequestStatus } from '@/lib/types/core';
 
 interface TimelineStep {
     id: string;

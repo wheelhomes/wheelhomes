@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Briefcase, MapPin, Clock, Filter, CheckCircle, ArrowRight } from "lucide-react";
+import { Briefcase, MapPin, Clock, CheckCircle, ArrowRight } from "lucide-react";
 import { db, auth } from "../../../../lib/firebase";
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, updateDoc, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { JobRequest } from "../../../../components/dashboard/provider/types";
 import { formatJobLocation } from "@/lib/job-utils";

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Calendar, MapPin, Clock, DollarSign, MessageCircle, User, AlertCircle } from "lucide-react";
+import { ArrowRight, Calendar, MapPin, Clock, DollarSign, MessageCircle, User } from "lucide-react";
 import { StatusBadge, RequestStatus } from "./StatusBadge";
 
 export interface TimelineEvent {

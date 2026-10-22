@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Home, Info, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { db } from "../../../lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 

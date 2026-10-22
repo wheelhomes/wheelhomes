@@ -6,17 +6,13 @@ import { collection, onSnapshot, query, orderBy, limit, where } from "firebase/f
 import {
     Users,
     Briefcase,
-    DollarSign,
     Activity,
     ArrowUpRight,
-    ArrowDownRight,
-    CheckCircle,
     AlertCircle,
     Clock,
     Server,
     Database,
     ShieldCheck,
-    MoreHorizontal,
     Building2,
     CreditCard
 } from "lucide-react";

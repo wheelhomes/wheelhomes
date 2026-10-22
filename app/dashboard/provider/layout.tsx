@@ -3,12 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore";
+import { doc, collection, query, where, onSnapshot, limit } from "firebase/firestore";
 import { Bell, LogOut, ChevronDown, Settings, Menu, X } from "lucide-react";
 import ProviderSidebar, {
     OPERATIONAL_MENU_ITEMS,
-    ACCOUNT_MENU_ITEMS,
-    PROVIDER_MENU_ITEMS
+    ACCOUNT_MENU_ITEMS
 } from "@/components/dashboard/ProviderSidebar";
 import Link from "next/link";
 

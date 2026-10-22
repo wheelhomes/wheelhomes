@@ -1,8 +1,6 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
-import { Smartphone, Download, ShieldCheck, CheckCircle2, ArrowRight, Zap, QrCode } from "lucide-react";
+import { Smartphone, Download, ShieldCheck, CheckCircle2, Zap } from "lucide-react";
 import Container from "@/components/ui/Container";
 
 export default function AppDownloadSection() {

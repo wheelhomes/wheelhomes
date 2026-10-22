@@ -1,5 +1,4 @@
 import React from 'react';
-import { RequestStatus } from '@/lib/types/core';
 
 interface RequestStatusBadgeProps {
     status: string;

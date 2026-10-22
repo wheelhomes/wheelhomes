@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
       "react-hooks/exhaustive-deps": "warn",
       "@typescript-eslint/ban-ts-comment": "warn",
       "react/display-name": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
+      "@typescript-eslint/no-require-imports": "warn",
     },
   },
   // Override default ignores of eslint-config-next.
@@ -23,7 +26,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    "**/*",
+    "functions/**",
+    "scripts/**",
+    "mobile/**",
+    "android/**",
   ]),
 ]);
 

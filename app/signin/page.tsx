@@ -5,7 +5,7 @@ import { User, Lock, AlertCircle, ArrowRight, Eye, EyeOff, AlertTriangle, Refres
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { auth, db } from "../../lib/firebase";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { resolveUserDestination } from "../../lib/auth-helpers";
 

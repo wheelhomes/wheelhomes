@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DollarSign, TrendingUp, CheckCircle, Clock, ShieldCheck, Wallet, ArrowDownRight, Briefcase } from "lucide-react";
+import { CheckCircle, Clock, ShieldCheck, Wallet, Briefcase } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { formatJobBudget } from "@/lib/job-utils";

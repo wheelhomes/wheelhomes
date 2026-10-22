@@ -14,14 +14,12 @@ import {
     CheckCircle2,
     AlertCircle,
     Loader2,
-    Sparkles,
     ExternalLink,
     FileText,
     Camera,
     Shield,
     Clock,
-    AlertTriangle,
-    UploadCloud
+    AlertTriangle
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, updateDoc, setDoc } from "firebase/firestore";

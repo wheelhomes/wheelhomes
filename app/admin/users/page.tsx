@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { db, auth } from "../../../lib/firebase";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, where, getDocs, deleteDoc, getDoc, setDoc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, where, getDocs, deleteDoc, getDoc, addDoc } from "firebase/firestore";
 import {
-    Users, Search, Filter, Briefcase, Home, Shield, CheckCircle, XCircle, Clock, Eye, X, Check, FileText, Trash2, UserPlus,
-    MapPin, Calendar, Camera, AlertCircle, ArrowUpRight, Ban, CheckCircle2, UserCheck
+    Users, Briefcase, Shield, CheckCircle, XCircle, Clock, X, MapPin, AlertCircle, ArrowUpRight, Ban, CheckCircle2
 } from "lucide-react";
 import { UserProfile } from "../../../types/user";
 import DeleteUserModal from "../../../components/admin/DeleteUserModal";
@@ -155,7 +154,7 @@ export default function UserManagementPage() {
         setIsProcessing(true);
         try {
             const nowIso = new Date().toISOString();
-            let updates: any = {
+            const updates: any = {
                 status: "approved",
                 approvedAt: nowIso
             };
@@ -719,7 +718,7 @@ export default function UserManagementPage() {
                                                         <div className="flex items-center justify-center h-full text-xs text-gray-500 animate-pulse">Loading Document...</div>
                                                     ) : (reviewDocs.govId || selectedUser.applicationData?.govIdUrl) ? (
                                                         <a href={reviewDocs.govId || selectedUser.applicationData?.govIdUrl} target="_blank" className="block w-full h-full">
-                                                            <img src={reviewDocs.govId || selectedUser.applicationData?.govIdUrl} className="w-full h-full object-contain" />
+                                                            <img src={reviewDocs.govId || selectedUser.applicationData?.govIdUrl} alt="Government ID" className="w-full h-full object-contain" />
                                                         </a>
                                                     ) : <div className="flex items-center justify-center h-full text-xs text-gray-400">Missing</div>}
                                                 </div>
@@ -736,7 +735,7 @@ export default function UserManagementPage() {
                                                         <div className="flex items-center justify-center h-full text-xs text-gray-500 animate-pulse">Loading...</div>
                                                     ) : (reviewDocs.passport || selectedUser.applicationData?.passportUrl) ? (
                                                         <a href={reviewDocs.passport || selectedUser.applicationData?.passportUrl} target="_blank" className="block w-full h-full">
-                                                            <img src={reviewDocs.passport || selectedUser.applicationData?.passportUrl} className="w-full h-full object-cover" />
+                                                            <img src={reviewDocs.passport || selectedUser.applicationData?.passportUrl} alt="Passport photo" className="w-full h-full object-cover" />
                                                         </a>
                                                     ) : <div className="flex items-center justify-center h-full text-xs text-gray-400">Missing</div>}
                                                 </div>

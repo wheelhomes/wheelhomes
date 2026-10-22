@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, doc, getDoc, setDoc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
+import { collection, getDocs, addDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import {
     Sparkles,
     Smartphone,
@@ -10,7 +10,6 @@ import {
     Send,
     Download,
     CheckCircle2,
-    AlertCircle,
     Bell,
     Users,
     FileCode,

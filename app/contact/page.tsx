@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 import { Mail, Phone, MapPin, MessageSquare } from "lucide-react";

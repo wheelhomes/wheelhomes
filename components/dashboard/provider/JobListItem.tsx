@@ -1,5 +1,5 @@
 import { JobRequest } from "./types";
-import { Briefcase, MapPin, Clock, ChevronRight } from "lucide-react";
+import { Briefcase, MapPin, ChevronRight } from "lucide-react";
 import { formatJobLocation } from "@/lib/job-utils";
 
 // Helper for relative time (since date-fns is not installed)

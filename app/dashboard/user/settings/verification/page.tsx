@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Shield, FileCheck, XCircle, Clock, CheckCircle, Upload, AlertCircle, Loader2, Eye, User } from "lucide-react";
+import { Shield, FileCheck, XCircle, Clock, CheckCircle, AlertCircle, Loader2, User } from "lucide-react";
 import { db } from "../../../../../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
@@ -174,7 +174,7 @@ export default function VerificationSettingsPage() {
 
                     <div className="bg-gray-50 rounded-lg aspect-video flex items-center justify-center border border-dashed border-gray-300 relative overflow-hidden group">
                         {docs.govId ? (
-                            <img src={docs.govId} className="w-full h-full object-contain" />
+                            <img src={docs.govId} alt="Government ID" className="w-full h-full object-contain" />
                         ) : (
                             <span className="text-sm text-gray-400">No Document</span>
                         )}
@@ -212,7 +212,7 @@ export default function VerificationSettingsPage() {
 
                     <div className="bg-gray-50 rounded-lg aspect-square w-32 mx-auto flex items-center justify-center border border-dashed border-gray-300 relative overflow-hidden">
                         {docs.passport ? (
-                            <img src={docs.passport} className="w-full h-full object-cover" />
+                            <img src={docs.passport} alt="Passport photo" className="w-full h-full object-cover" />
                         ) : (
                             <span className="text-sm text-gray-400">No Photo</span>
                         )}

@@ -1,4 +1,3 @@
-import React from "react";
 import Container from "@/components/ui/Container";
 import Link from "next/link";
 import Button from "@/components/ui/Button";

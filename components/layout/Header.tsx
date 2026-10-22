@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, User, Phone, Plus, LogOut, Smartphone, Download, Briefcase, Clock, ShieldCheck } from "lucide-react";
+import { Menu, User, LogOut, Download } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";

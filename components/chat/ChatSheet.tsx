@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, X, MessageSquare, User, Loader2 } from "lucide-react";
+import { Send, X, MessageSquare, Loader2 } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { collection, query, onSnapshot, addDoc, orderBy, serverTimestamp } from "firebase/firestore";
 

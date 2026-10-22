@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { db, auth } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, getDoc, doc } from "firebase/firestore";
 import { UnifiedChat } from "@/components/chat/UnifiedChat";
-import { Search, MessageSquare, Clock, Filter, ChevronRight } from "lucide-react";
+import { Search, MessageSquare, ChevronRight } from "lucide-react";
 
 interface ChatSession {
     jobId: string;

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../lib/firebase";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
-import { AlertTriangle, Clock, ShieldAlert } from "lucide-react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { UserProfile } from "../../types/user";
 import { isEmailVerifiedGlobally } from "@/lib/auth-helpers";
 import Link from "next/link";

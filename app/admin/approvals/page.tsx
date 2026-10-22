@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { db } from "../../../lib/firebase";
-import { collection, query, where, getDocs, getDoc, addDoc, doc, setDoc, updateDoc, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, addDoc, doc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import {
     CheckCircle2,
     Clock,
@@ -15,25 +15,16 @@ import {
     Mail,
     MapPin,
     Eye,
-    ExternalLink,
     ShieldCheck,
-    ChevronRight,
-    User,
-    Sparkles,
     RefreshCw,
     Wrench,
     FileText,
-    Image as ImageIcon,
-    ThumbsUp,
-    ThumbsDown,
     AlertTriangle,
     X,
     Building,
     Check,
-    Layers,
     BadgeCheck,
     Calendar,
-    ArrowUpRight,
     Smartphone,
     Globe
 } from "lucide-react";

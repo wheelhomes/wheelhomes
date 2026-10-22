@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, MapPin, Bed, Bath, Move, ArrowRight, ShieldCheck } from "lucide-react";
+import { MapPin, Bed, Bath, Move, ShieldCheck } from "lucide-react";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 import { db } from "@/lib/firebase";

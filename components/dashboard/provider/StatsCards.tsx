@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Clock, CheckCircle, Star, Award, ShieldCheck } from "lucide-react";
+import { Briefcase, Clock, CheckCircle, Star } from "lucide-react";
 
 interface StatsProps {
     stats: {

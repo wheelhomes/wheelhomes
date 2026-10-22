@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, MapPin, User, ChevronRight, Check, X, Play, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Clock, MapPin, User, Check, Play, ShieldCheck } from "lucide-react";
 import { formatJobLocation } from "@/lib/job-utils";
 
 interface JobCardProps {

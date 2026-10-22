@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star, ShieldCheck, ThumbsUp, MessageSquare, Award, User, CheckCircle2 } from "lucide-react";
+import { Star, MessageSquare, Award, CheckCircle2 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, collection, query, where, onSnapshot } from "firebase/firestore";
 

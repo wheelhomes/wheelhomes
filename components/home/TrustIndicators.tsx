@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import Container from "@/components/ui/Container";
 import { CheckCircle, Shield, MessageSquare, Clock, CreditCard } from "lucide-react";
 

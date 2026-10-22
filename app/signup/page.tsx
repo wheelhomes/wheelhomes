@@ -6,7 +6,7 @@ import { auth, db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Phone, Lock, User, ArrowRight, X, Eye, EyeOff, Check, Shield } from "lucide-react";
+import { Mail, Phone, Lock, User, ArrowRight, X, Eye, EyeOff } from "lucide-react";
 
 
 export default function SignupPage() {

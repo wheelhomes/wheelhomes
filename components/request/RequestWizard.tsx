@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react";
 import {
-    X, ArrowRight, ArrowLeft, MapPin, Camera, AlertTriangle,
-    Zap, Clock, Calendar, CheckCircle, Search, Sparkles, Droplet, Wrench, Thermometer
+    X, ArrowRight, MapPin, Camera, Zap, CheckCircle, Sparkles, Droplet, Wrench, Thermometer
 } from "lucide-react";
-import { db, storage } from "../../lib/firebase";
-import { collection, addDoc, serverTimestamp, query, where, limit, getDocs } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db } from "../../lib/firebase";
+import { collection, addDoc, query, where, limit, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { ProviderSelectionList, Provider } from "./ProviderSelectionList";
 

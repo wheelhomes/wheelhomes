@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Shield, Lock, Bell, HelpCircle, LogOut, ChevronRight } from "lucide-react";
+import { User, Shield, Lock, Bell, HelpCircle } from "lucide-react";
 
 export default function SettingsLayout({
     children,

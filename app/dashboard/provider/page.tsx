@@ -10,7 +10,6 @@ import {
     doc,
     updateDoc,
     getDoc,
-    or,
     addDoc
 } from "firebase/firestore";
 import { db, auth } from "../../../lib/firebase";

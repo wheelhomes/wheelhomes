@@ -1,6 +1,4 @@
-import React from "react";
 import Container from "@/components/ui/Container";
-import { Search, UserCheck, CheckCircle2 } from "lucide-react";
 
 const HowItWorksPreview = () => {
     const steps = [

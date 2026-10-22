@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { User, Briefcase, MapPin, Phone, Mail, Award, CheckCircle2, ShieldCheck, Camera, FileText, Sparkles, ExternalLink, Loader2 } from "lucide-react";
+import { Briefcase, MapPin, Phone, Mail, Award, CheckCircle2, ShieldCheck, Camera, FileText, Sparkles, ExternalLink, Loader2 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, onSnapshot, updateDoc, setDoc } from "firebase/firestore";
 import { compressImageToBase64 } from "@/lib/image-utils";

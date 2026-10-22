@@ -1,5 +1,4 @@
-import Image from "next/link";
-import { Camera, Video, Map } from "lucide-react";
+import { Camera } from "lucide-react";
 
 export default function PropertyGallery() {
     return (

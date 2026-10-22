@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowLeft, RefreshCw } from "lucide-react";
+import { Download, Smartphone, ShieldCheck, CheckCircle2, ArrowLeft } from "lucide-react";
 
 export default function DownloadPage() {
     const [downloadTriggered, setDownloadTriggered] = useState(false);

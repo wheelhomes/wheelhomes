@@ -2,7 +2,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 

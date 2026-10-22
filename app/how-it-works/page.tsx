@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 import { User, Briefcase, Building, CheckCircle2, Search, Calendar, MessageSquare, CreditCard, Wrench } from "lucide-react";

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { db } from "../../../lib/firebase";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import {
     Building2,
     Search,
@@ -16,11 +16,7 @@ import {
     Eye,
     X,
     CheckCircle,
-    Clock,
-    AlertCircle,
-    User,
-    DollarSign,
-    ExternalLink
+    Clock
 } from "lucide-react";
 
 interface Property {

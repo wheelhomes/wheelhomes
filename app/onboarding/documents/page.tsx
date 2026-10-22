@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
 import { doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
-import { Shield, Upload, FileText, Camera, CheckCircle, AlertCircle, X, ArrowRight } from "lucide-react";
+import { Shield, Upload, FileText, Camera, AlertCircle, X, ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { compressImageToBase64 } from "../../../lib/image-utils";
 import { sendPendingReviewEmailAction } from "@/app/actions/email";

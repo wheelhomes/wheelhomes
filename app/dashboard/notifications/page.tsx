@@ -4,14 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
     Bell,
-    CheckCircle2,
-    Clock,
     ArrowLeft,
     CheckCheck,
     MessageSquare,
     Briefcase,
-    ShieldAlert,
-    Trash2,
     Loader2
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";

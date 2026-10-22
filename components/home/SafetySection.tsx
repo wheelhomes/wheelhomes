@@ -1,4 +1,3 @@
-import React from "react";
 import Container from "@/components/ui/Container";
 import { ShieldCheck, MessageSquare, Briefcase, UserCheck, Eye } from "lucide-react";
 

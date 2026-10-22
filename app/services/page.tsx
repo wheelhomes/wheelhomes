@@ -1,8 +1,6 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
-import { Wrench, Zap, Droplet, Paintbrush, Hammer, Truck, ShieldCheck, Star } from "lucide-react";
+import { Wrench, Zap, Droplet, Paintbrush, Hammer, Truck, ShieldCheck } from "lucide-react";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 

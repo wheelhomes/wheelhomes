@@ -2,24 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { db } from "../../../lib/firebase";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, getDoc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, addDoc } from "firebase/firestore";
 import {
     CreditCard,
     Search,
     ShieldCheck,
     CheckCircle,
-    Clock,
     AlertCircle,
-    ArrowUpRight,
     DollarSign,
     Lock,
     Unlock,
     RotateCcw,
     Eye,
-    X,
-    User,
-    Briefcase,
-    ExternalLink
+    X
 } from "lucide-react";
 
 interface Transaction {

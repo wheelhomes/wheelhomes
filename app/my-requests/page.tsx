@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { RequestCard, UserJobRequest } from '@/components/requests/RequestCard';
-import { Search, Filter, Plus, Wrench } from 'lucide-react';
+import { Search, Plus, Wrench } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import Link from 'next/link';

@@ -139,7 +139,6 @@ export const cleanupMockData = async () => {
 
     try {
         const usersRef = collection(db, "users");
-        let deletedCount = 0;
 
         // Query by Business Name matches
         // Note: Firestore 'in' query supports up to 10 items

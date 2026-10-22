@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 

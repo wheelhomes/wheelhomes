@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { User, LogOut, LayoutDashboard, Home, Bell, Settings, ChevronDown, Menu } from "lucide-react";
+import { LogOut, Bell, Settings, ChevronDown, Menu } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, onSnapshot, limit } from "firebase/firestore";
 import Sidebar from "../../../components/dashboard/Sidebar";
 
 export default function UserDashboardLayout({

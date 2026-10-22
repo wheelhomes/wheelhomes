@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth, db, storage } from "../../../lib/firebase";
+import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ref, getDownloadURL, uploadString } from "firebase/storage";
 import { compressImageToBase64 } from "../../../lib/image-utils";
 import { Shield, Upload, CheckCircle, AlertCircle, Clock, FileText, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -72,7 +71,7 @@ export default function VerificationSettingsPage() {
         setIsUploading(true);
 
         try {
-            let appDataUpdates: any = {};
+            const appDataUpdates: any = {};
 
             // Re-upload ID if selected
             if (idFile) {

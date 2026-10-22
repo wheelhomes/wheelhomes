@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "../../lib/firebase";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { sendEmailVerification, signOut } from "firebase/auth";
 import { Mail, CheckCircle2, ArrowRight, RefreshCw, AlertCircle, LogOut, KeyRound } from "lucide-react";
 import { isEmailVerifiedGlobally, resolveUserDestination } from "@/lib/auth-helpers";
