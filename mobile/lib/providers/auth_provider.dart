@@ -104,7 +104,12 @@ class AuthProvider with ChangeNotifier {
     try {
       final success = await _authService.verifyEmailOtp(uid: _user!.uid, code: code);
       if (success) {
+        try {
+          await _user?.reload();
+          _user = FirebaseAuth.instance.currentUser;
+        } catch (_) {}
         await fetchProfile(_user!.uid);
+        notifyListeners();
       }
       _setLoading(false);
       return success;
