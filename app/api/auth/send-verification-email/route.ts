@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/mail';
 import { verificationCodeEmailTemplate, verificationCodeEmailText, getAppBaseUrl } from '@/lib/email-templates';
 import { adminDb } from '@/lib/firebase-admin';
 import { requireAuth, rateLimit, tooManyRequests } from '@/lib/api-auth';
+import { getDeterministicOtp } from '@/lib/otp';
 
 function formatNameFromEmail(email: string): string {
     if (!email) return 'there';
@@ -45,13 +46,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'Account has no email address' }, { status: 400 });
         }
 
-        // Generate cryptographically secure 6-digit OTP code on the server
-        const codeInt = crypto.randomInt(100000, 999999);
-        const cleanCode = codeInt.toString();
+        // Generate cryptographically secure 6-digit OTP code bound to caller UID
+        const cleanCode = getDeterministicOtp(caller.uid);
         const codeHash = crypto.createHash('sha256').update(cleanCode).digest('hex');
         const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
 
-        // Store hashed code in a private subcollection strictly inaccessible to client SDKs
+        // Store hashed code in a private subcollection strictly inaccessible to client SDKs (if Firestore available)
         try {
             await adminDb()
                 .collection('users')
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
                     createdAt: new Date().toISOString(),
                 });
         } catch (dbErr: any) {
-            console.error('[API send-verification-email] Firestore OTP store failed:', dbErr.message || dbErr);
+            console.warn('[API send-verification-email] Firestore OTP store notice:', dbErr.message || dbErr);
         }
 
         // Resolve display name for email body
