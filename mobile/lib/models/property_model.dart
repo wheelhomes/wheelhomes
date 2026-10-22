@@ -10,6 +10,7 @@ class PropertyModel {
   final String status;
   final String image;
   final String agentName;
+  final String? agentId;
   final String? agentImage;
 
   PropertyModel({
@@ -24,10 +25,12 @@ class PropertyModel {
     required this.status,
     required this.image,
     required this.agentName,
+    this.agentId,
     this.agentImage,
   });
 
   factory PropertyModel.fromMap(Map<String, dynamic> map, String docId) {
+    final rawAgentId = map['agentId'] ?? map['userId'];
     return PropertyModel(
       id: docId,
       title: map['title'] ?? '',
@@ -40,6 +43,7 @@ class PropertyModel {
       status: map['status'] ?? 'For Rent',
       image: map['image'] ?? 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80',
       agentName: map['agentName'] ?? 'Wheelhomes Agent',
+      agentId: rawAgentId != null && rawAgentId.toString().trim().isNotEmpty ? rawAgentId.toString().trim() : null,
       agentImage: map['agentImage'],
     );
   }
@@ -56,6 +60,7 @@ class PropertyModel {
       'status': status,
       'image': image,
       'agentName': agentName,
+      'agentId': agentId,
       'agentImage': agentImage,
     };
   }

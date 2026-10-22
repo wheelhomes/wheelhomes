@@ -9,7 +9,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/request_provider.dart';
 
 class CreateRequestScreen extends StatefulWidget {
-  const CreateRequestScreen({super.key});
+  final String? initialCategory;
+  const CreateRequestScreen({super.key, this.initialCategory});
 
   @override
   State<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -20,7 +21,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
   
-  String _selectedService = 'Plumbing & Water Piping';
+  late String _selectedService;
   final _descriptionController = TextEditingController();
   final _addressController = TextEditingController();
   final _budgetController = TextEditingController();
@@ -34,6 +35,16 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     'General Handyman & Carpentry',
     'Cleaning & Fumigation',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCategory != null && _services.contains(widget.initialCategory)) {
+      _selectedService = widget.initialCategory!;
+    } else {
+      _selectedService = _services.first;
+    }
+  }
 
   @override
   void dispose() {

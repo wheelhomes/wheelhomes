@@ -125,4 +125,52 @@ class RequestProvider with ChangeNotifier {
       return false;
     }
   }
+
+  Future<bool> submitServiceReview({
+    required String jobId,
+    required String providerId,
+    required double rating,
+    required String review,
+  }) async {
+    _isSubmitting = true;
+    notifyListeners();
+    try {
+      await _firestoreService.submitServiceReview(
+        jobId: jobId,
+        providerId: providerId,
+        rating: rating,
+        review: review,
+      );
+      _isSubmitting = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error submitting service review: $e');
+      _isSubmitting = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> cancelRequest({
+    required String jobId,
+    String? reason,
+  }) async {
+    _isSubmitting = true;
+    notifyListeners();
+    try {
+      await _firestoreService.cancelServiceRequest(
+        jobId: jobId,
+        reason: reason,
+      );
+      _isSubmitting = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error cancelling service request: $e');
+      _isSubmitting = false;
+      notifyListeners();
+      return false;
+    }
+  }
 }

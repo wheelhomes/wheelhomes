@@ -160,7 +160,9 @@ class PropertyDetailScreen extends StatelessWidget {
                             final chatId = await chatProvider.openPropertyChat(
                               clientId: user.uid,
                               clientName: clientName,
-                              agentId: property.agentName.toLowerCase().replaceAll(' ', '_'),
+                              agentId: (property.agentId != null && property.agentId!.isNotEmpty)
+                                  ? property.agentId!
+                                  : property.agentName.toLowerCase().replaceAll(' ', '_'),
                               agentName: property.agentName,
                               propertyId: property.id,
                               propertyTitle: property.title,

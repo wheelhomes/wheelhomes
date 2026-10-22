@@ -9,16 +9,30 @@ class PropertyProvider with ChangeNotifier {
   final StorageService _storageService = StorageService();
 
   List<PropertyModel> _properties = [];
+  final Set<String> _savedPropertyIds = {};
   String _selectedCategory = 'All';
   String _searchQuery = '';
   bool _isLoading = false;
   bool _isCreating = false;
 
   bool get isCreating => _isCreating;
+  int get savedCount => _savedPropertyIds.length;
+
+  bool isSaved(String propertyId) => _savedPropertyIds.contains(propertyId);
+
+  void toggleSaveProperty(String propertyId) {
+    if (_savedPropertyIds.contains(propertyId)) {
+      _savedPropertyIds.remove(propertyId);
+    } else {
+      _savedPropertyIds.add(propertyId);
+    }
+    notifyListeners();
+  }
 
   List<PropertyModel> get properties {
     return _properties.where((p) {
       final matchesCategory = _selectedCategory == 'All' ||
+          (_selectedCategory == 'Saved' && _savedPropertyIds.contains(p.id)) ||
           p.type.toLowerCase() == _selectedCategory.toLowerCase() ||
           p.status.toLowerCase() == _selectedCategory.toLowerCase();
       final matchesSearch = p.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||

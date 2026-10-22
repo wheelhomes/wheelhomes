@@ -12,6 +12,7 @@ import '../../providers/notification_provider.dart';
 import '../../models/property_model.dart';
 import '../../models/request_model.dart';
 import '../requests/create_request_screen.dart';
+import '../requests/request_detail_screen.dart';
 import '../property/property_detail_screen.dart';
 import '../property/create_property_screen.dart';
 import '../chat/chat_screen.dart';
@@ -460,17 +461,149 @@ class _ExploreTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
+                  // ── Quick Book Home Services (Client / Resident) ──
+                  if (Provider.of<AuthProvider>(context).userProfile?.role != 'service_provider') ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hire Skilled Artisans 🛠️',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Verified technicians with escrow protection',
+                              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                            ),
+                          ],
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
+                            );
+                          },
+                          child: const Row(
+                            children: [
+                              Text('Book Pro', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              Icon(LucideIcons.chevronRight, size: 14),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _ServiceCategoryCard(
+                            title: 'Plumbing',
+                            subtitle: 'Pipes & Leaks',
+                            icon: LucideIcons.droplets,
+                            color: Color(0xFF047857),
+                            categoryName: 'Plumbing & Water Piping',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'Electrical',
+                            subtitle: 'Wiring & Power',
+                            icon: LucideIcons.zap,
+                            color: Color(0xFFD97706),
+                            categoryName: 'Electrical & Wiring Repair',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'AC / HVAC',
+                            subtitle: 'Cooling & Gas',
+                            icon: LucideIcons.fan,
+                            color: Color(0xFF0284C7),
+                            categoryName: 'AC & HVAC Servicing',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'Carpentry',
+                            subtitle: 'Doors & Wood',
+                            icon: LucideIcons.hammer,
+                            color: Color(0xFFB45309),
+                            categoryName: 'General Handyman & Carpentry',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'Painting',
+                            subtitle: 'Wall & Finish',
+                            icon: LucideIcons.paintBucket,
+                            color: Color(0xFF7C3AED),
+                            categoryName: 'Painting & Renovation',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'Roofing',
+                            subtitle: 'Ceiling Repair',
+                            icon: LucideIcons.home,
+                            color: Color(0xFFE11D48),
+                            categoryName: 'Roofing & Ceiling Leak',
+                          ),
+                          _ServiceCategoryCard(
+                            title: 'Cleaning',
+                            subtitle: 'Deep Clean',
+                            icon: LucideIcons.sparkles,
+                            color: Color(0xFF0D9488),
+                            categoryName: 'Cleaning & Fumigation',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Escrow Protection Guarantee Micro-banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(LucideIcons.shieldCheck, size: 18, color: Color(0xFF047857)),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Wheelhomes Escrow Guarantee: Artisans are only paid after you inspect and approve the work.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Color(0xFF047857),
+                                fontWeight: FontWeight.w600,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+
                   // Categories
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: ['All', 'Apartment', 'Studio', 'Villa', 'For Rent', 'For Sale'].map((cat) {
+                      children: ['All', 'Saved', 'Apartment', 'Studio', 'Villa', 'For Rent', 'For Sale'].map((cat) {
                         final isSelected = propertyProvider.selectedCategory == cat;
+                        final labelText = cat == 'Saved'
+                            ? (propertyProvider.savedCount > 0 ? 'Saved (${propertyProvider.savedCount})' : 'Saved')
+                            : cat;
                         return Padding(
                           padding: const EdgeInsets.only(right: 8.0),
                           child: FilterChip(
                             selected: isSelected,
-                            label: Text(cat),
+                            avatar: cat == 'Saved'
+                                ? Icon(
+                                    LucideIcons.heart,
+                                    size: 14,
+                                    color: isSelected ? Colors.white : AppTheme.error,
+                                  )
+                                : null,
+                            label: Text(labelText),
                             labelStyle: TextStyle(
                               color: isSelected ? Colors.white : AppTheme.textPrimary,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -571,6 +704,79 @@ class _ExploreTab extends StatelessWidget {
   }
 }
 
+class _ServiceCategoryCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final String categoryName;
+
+  const _ServiceCategoryCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.categoryName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CreateRequestScreen(initialCategory: categoryName),
+          ),
+        );
+      },
+      child: Container(
+        width: 112,
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10.5, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PropertyCardItem extends StatelessWidget {
   final PropertyModel property;
 
@@ -631,6 +837,36 @@ class _PropertyCardItem extends StatelessWidget {
                         property.status.toUpperCase(),
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                       ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Consumer<PropertyProvider>(
+                      builder: (context, propProv, _) {
+                        final isSaved = propProv.isSaved(property.id);
+                        return GestureDetector(
+                          onTap: () => propProv.toggleSaveProperty(property.id),
+                          child: Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.12),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              LucideIcons.heart,
+                              color: isSaved ? AppTheme.error : AppTheme.textSecondary,
+                              size: 17,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   Positioned(
@@ -716,12 +952,30 @@ class _SpecItem extends StatelessWidget {
   }
 }
 
-class _ServiceRequestsTab extends StatelessWidget {
+class _ServiceRequestsTab extends StatefulWidget {
   const _ServiceRequestsTab();
+
+  @override
+  State<_ServiceRequestsTab> createState() => _ServiceRequestsTabState();
+}
+
+class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
+  String _selectedFilter = 'All';
 
   @override
   Widget build(BuildContext context) {
     final requestProvider = Provider.of<RequestProvider>(context);
+    final allRequests = requestProvider.userRequests;
+
+    final displayedRequests = allRequests.where((req) {
+      final s = req.status.toLowerCase();
+      if (_selectedFilter == 'Active') {
+        return s == 'pending' || s == 'open' || s == 'assigned' || s == 'in_progress';
+      } else if (_selectedFilter == 'Completed') {
+        return s == 'completed' || s == 'fully_completed' || req.paymentStatus == 'released';
+      }
+      return true;
+    }).toList();
 
     return SafeArea(
       child: Padding(
@@ -729,255 +983,397 @@ class _ServiceRequestsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('My Service Requests 🛠️', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 6),
-            Text('Track repairs, plumbing, electrical, and maintenance', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('My Service Requests 🛠️', style: Theme.of(context).textTheme.headlineMedium),
+                    const SizedBox(height: 4),
+                    Text('Track maintenance, repairs, and escrow status', style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Filter Tabs
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ['All', 'Active', 'Completed'].map((filter) {
+                  final isSelected = _selectedFilter == filter;
+                  final count = filter == 'All'
+                      ? allRequests.length
+                      : filter == 'Active'
+                          ? allRequests.where((r) => r.status != 'completed' && r.status != 'fully_completed' && r.status != 'cancelled').length
+                          : allRequests.where((r) => r.status == 'completed' || r.status == 'fully_completed' || r.paymentStatus == 'released').length;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: FilterChip(
+                      selected: isSelected,
+                      label: Text('$filter ($count)'),
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 12.5,
+                      ),
+                      selectedColor: AppTheme.primary,
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: isSelected ? AppTheme.primary : AppTheme.border),
+                      ),
+                      onSelected: (_) => setState(() => _selectedFilter = filter),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
 
             Expanded(
-              child: requestProvider.userRequests.isEmpty
+              child: displayedRequests.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.clipboardCheck, size: 48, color: Colors.grey[400]),
-                          const SizedBox(height: 12),
-                          const Text('No service requests yet.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          if (Provider.of<AuthProvider>(context, listen: false).userProfile?.role != 'service_provider')
-                            const Text('Tap "New Request" below to get started.', style: TextStyle(color: AppTheme.textSecondary)),
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(LucideIcons.clipboardCheck, size: 48, color: Colors.grey[400]),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _selectedFilter == 'All'
+                                ? 'No service requests yet.'
+                                : 'No $_selectedFilter requests found.',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Need a plumber, electrician, AC repair, or carpentry?',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
+                              );
+                            },
+                            icon: const Icon(LucideIcons.plus, size: 16),
+                            label: const Text('Create New Request'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      itemCount: requestProvider.userRequests.length,
+                      itemCount: displayedRequests.length,
                       itemBuilder: (context, index) {
-                        final req = requestProvider.userRequests[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppTheme.border),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.02),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    req.serviceType,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primary.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      req.status.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: AppTheme.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                req.description,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: AppTheme.textPrimary, height: 1.3),
-                              ),
-                              if (req.location['address'] != null && '${req.location['address']}'.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(LucideIcons.mapPin, size: 14, color: AppTheme.textSecondary),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        '${req.location['address']}',
-                                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                              if (req.images.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  height: 60,
-                                  child: ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: req.images.length,
-                                    itemBuilder: (context, imgIdx) {
-                                      return Container(
-                                        width: 60,
-                                        height: 60,
-                                        margin: const EdgeInsets.only(right: 8),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: AppTheme.border),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Image.network(
-                                            req.images[imgIdx],
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              color: Colors.grey[200],
-                                              child: const Icon(LucideIcons.image, size: 20, color: Colors.grey),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                              if (req.price != null) ...[
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text('Estimated Budget:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                                    Text(
-                                      '₦${req.price!.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primary),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              // Escrow Payment Status Badge
-                              if (req.paymentStatus == 'escrow_held')
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFECFDF5),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(LucideIcons.shieldCheck, size: 14, color: Color(0xFF047857)),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Funds Secured in Escrow 🔒',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF047857),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              else if (req.paymentStatus == 'released')
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(LucideIcons.checkCheck, size: 14, color: AppTheme.primary),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Payment Released to Provider ✅',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.primary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              const SizedBox(height: 12),
-                              const Divider(height: 1, color: AppTheme.border),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  if (req.paymentStatus == 'unpaid')
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => PaymentCheckoutScreen(request: req),
-                                          ),
-                                        );
-                                      },
-                                      icon: const Icon(LucideIcons.lock, size: 14),
-                                      label: const Text('Pay Escrow 🔒', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppTheme.primary,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    )
-                                  else if (req.paymentStatus == 'escrow_held')
-                                    OutlinedButton.icon(
-                                      onPressed: () => _confirmReleaseEscrow(context, req),
-                                      icon: const Icon(LucideIcons.check, size: 14, color: Color(0xFF047857)),
-                                      label: const Text('Release Escrow', style: TextStyle(fontSize: 12, color: Color(0xFF047857), fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFF047857)),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    )
-                                  else
-                                    const SizedBox.shrink(),
-                                  TextButton.icon(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ChatScreen(
-                                            title: req.serviceType,
-                                            subtitle: req.location['address'] ?? 'Service Request',
-                                            jobId: req.id,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(LucideIcons.messageSquare, size: 16),
-                                    label: const Text('Chat / Messages'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: AppTheme.primary,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
+                        final req = displayedRequests[index];
+                        return _buildRequestCard(context, req);
                       },
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRequestCard(BuildContext context, ServiceRequestModel req) {
+    final status = req.status.toLowerCase();
+    final isCompleted = status == 'completed' || status == 'fully_completed';
+    final isUnpaid = req.paymentStatus == 'unpaid';
+    final isHeld = req.paymentStatus == 'escrow_held';
+    final hasRated = req.clientRating != null && req.clientRating! > 0;
+
+    final (statusLabel, statusColor, statusBg, statusIcon) = switch (status) {
+      'completed' || 'fully_completed' => ('COMPLETED', const Color(0xFF047857), const Color(0xFFECFDF5), LucideIcons.badgeCheck),
+      'in_progress' => ('IN PROGRESS', const Color(0xFF1D4ED8), const Color(0xFFEFF6FF), LucideIcons.wrench),
+      'assigned' => ('ASSIGNED', AppTheme.primary, AppTheme.primary.withValues(alpha: 0.1), LucideIcons.userCheck),
+      'cancelled' => ('CANCELLED', AppTheme.error, const Color(0xFFFEF2F2), LucideIcons.xCircle),
+      _ => ('PENDING', const Color(0xFFD97706), const Color(0xFFFFFBEB), LucideIcons.clockAlert),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RequestDetailScreen(request: req),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Row: Category & Status Badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      req.serviceType,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 12, color: statusColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Description
+              Text(
+                req.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.35),
+              ),
+
+              // Location
+              if (req.location['address'] != null && '${req.location['address']}'.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(LucideIcons.mapPin, size: 14, color: AppTheme.textSecondary),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        '${req.location['address']}',
+                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              // Budget & Escrow Row
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (req.price != null) ...[
+                    Row(
+                      children: [
+                        const Text('Budget: ', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                        Text(
+                          '₦${req.price!.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primary),
+                        ),
+                      ],
+                    ),
+                  ] else
+                    const SizedBox.shrink(),
+
+                  // Escrow Status Pill
+                  if (isHeld)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.shieldCheck, size: 12, color: Color(0xFF047857)),
+                          SizedBox(width: 4),
+                          Text('Escrow Secured 🔒', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
+                        ],
+                      ),
+                    )
+                  else if (req.paymentStatus == 'released')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.checkCheck, size: 12, color: AppTheme.primary),
+                          SizedBox(width: 4),
+                          Text('Paid & Released ✅', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('Escrow Unpaid', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.error)),
+                    ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppTheme.border),
+              const SizedBox(height: 10),
+
+              // Bottom Action Buttons
+              Row(
+                children: [
+                  if (isUnpaid) ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PaymentCheckoutScreen(request: req),
+                            ),
+                          );
+                        },
+                        icon: const Icon(LucideIcons.lock, size: 14),
+                        label: const Text('Pay Escrow 🔒', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isHeld && isCompleted) ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _confirmReleaseEscrow(context, req),
+                        icon: const Icon(LucideIcons.checkCheck, size: 14),
+                        label: const Text('Release Escrow', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF047857),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isCompleted && !hasRated) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RequestDetailScreen(request: req),
+                            ),
+                          );
+                        },
+                        icon: const Icon(LucideIcons.star, size: 14, color: Color(0xFFD97706)),
+                        label: const Text('Rate Specialist ⭐', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFFBEB),
+                          side: const BorderSide(color: Color(0xFFFDE68A)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+
+                  // Direct Chat
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            title: req.serviceType,
+                            subtitle: req.location['address'] ?? 'Service Request',
+                            jobId: req.id,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(LucideIcons.messageSquare, size: 14),
+                    label: const Text('Chat', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primary,
+                      side: const BorderSide(color: AppTheme.border),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // View Details Icon Arrow
+                  IconButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RequestDetailScreen(request: req),
+                        ),
+                      );
+                    },
+                    icon: const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textSecondary),
+                    tooltip: 'View Details',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -988,7 +1384,7 @@ class _ServiceRequestsTab extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Release Escrow Payment?'),
+        title: const Text('Release Escrow Payment? 🔒'),
         content: Text(
           'Confirm that the service (${req.serviceType}) has been completed satisfactorily. Once released, the payment is dispatched to the provider.',
           style: const TextStyle(fontSize: 13, height: 1.4),

@@ -216,4 +216,80 @@ class FirestoreService {
     final docRef = await _firestore.collection('properties').add(propertyData);
     return docRef.id;
   }
+
+  // Submit client rating & review for a completed service request
+  Future<void> submitServiceReview({
+    required String jobId,
+    required String providerId,
+    required double rating,
+    required String review,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final reviewData = {
+      'clientRating': rating,
+      'rating': rating,
+      'clientReview': review.trim(),
+      'review': review.trim(),
+      'ratedAt': now,
+    };
+
+    try {
+      await _firestore.collection('job_requests').doc(jobId).update(reviewData);
+    } catch (_) {}
+    try {
+      await _firestore.collection('requests').doc(jobId).update(reviewData);
+    } catch (_) {}
+
+    // Update provider profile rating and review count
+    if (providerId.trim().isNotEmpty) {
+      try {
+        final userDocRef = _firestore.collection('users').doc(providerId.trim());
+        final userSnap = await userDocRef.get();
+        if (userSnap.exists) {
+          final currentRating = double.tryParse('${userSnap.data()?['rating']}') ?? 5.0;
+          final currentReviewCount = int.tryParse('${userSnap.data()?['reviewCount']}') ?? 0;
+          final newCount = currentReviewCount + 1;
+          final newRating = ((currentRating * currentReviewCount) + rating) / newCount;
+          await userDocRef.update({
+            'rating': double.parse(newRating.toStringAsFixed(1)),
+            'reviewCount': newCount,
+          });
+        }
+      } catch (_) {}
+
+      try {
+        await _firestore.collection('notifications').add({
+          'userId': providerId.trim(),
+          'recipientId': providerId.trim(),
+          'title': 'New Review Received! ⭐',
+          'body': 'A client rated your service $rating/5 stars: "${review.trim()}".',
+          'type': 'review',
+          'isRead': false,
+          'createdAt': now,
+          'payload': {'jobId': jobId, 'rating': rating},
+        });
+      } catch (_) {}
+    }
+  }
+
+  // Cancel a pending service request (client only, before provider starts work)
+  Future<void> cancelServiceRequest({
+    required String jobId,
+    String? reason,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final updates = {
+      'status': 'cancelled',
+      'cancellationReason': reason ?? 'Cancelled by client',
+      'cancelledAt': now,
+      'updatedAt': now,
+    };
+
+    try {
+      await _firestore.collection('job_requests').doc(jobId).update(updates);
+    } catch (_) {}
+    try {
+      await _firestore.collection('requests').doc(jobId).update(updates);
+    } catch (_) {}
+  }
 }
