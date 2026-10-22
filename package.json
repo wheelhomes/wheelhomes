@@ -2,16 +2,13 @@
   "name": "houzez-clone",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": "20"
-  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy:preview": "next build && npx firebase-tools hosting:channel:deploy preview_release --expires 7d",
-    "deploy:prod": "next build && npx firebase-tools deploy"
+    "deploy:preview": "next build && firebase hosting:channel:deploy preview_release --expires 7d",
+    "deploy:prod": "next build && firebase deploy"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.2",
