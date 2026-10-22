@@ -212,7 +212,14 @@ class AuthProvider with ChangeNotifier {
     _setLoading(true);
     try {
       await _authService.updateUserRole(_user!.uid, role);
+      if (_userProfile != null) {
+        _userProfile = UserProfile.fromMap({
+          ..._userProfile!.rawData,
+          'role': role,
+        }, _user!.uid);
+      }
       await fetchProfile(_user!.uid);
+      notifyListeners();
     } catch (e) {
       _setError(AuthErrorHelper.format(e));
     } finally {

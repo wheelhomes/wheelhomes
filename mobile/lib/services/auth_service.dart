@@ -116,15 +116,10 @@ class AuthService {
 
   // Update Role
   Future<void> updateUserRole(String uid, String role) async {
-    // Only regular users are automatically approved without KYC.
-    // Service providers, agents, and users resetting role stay 'unverified'.
-    final status = (role == 'user') ? 'approved' : 'unverified';
-
-    await _firestore.collection('users').doc(uid).update({
+    await _firestore.collection('users').doc(uid).set({
       'role': role,
-      'status': status,
-      'emailVerified': true,
-    });
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
 
