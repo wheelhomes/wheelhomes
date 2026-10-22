@@ -121,7 +121,7 @@ class AuthWrapper extends StatelessWidget {
 
     // ── Step 1.5: Email Verification Gating ──
     // Unverified email accounts must enter the 6-digit OTP code before proceeding
-    if (!profile.isEmailVerifiedGlobally) {
+    if (!authProvider.isEmailVerified) {
       return const VerifyEmailScreen();
     }
 

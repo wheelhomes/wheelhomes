@@ -21,7 +21,8 @@ export async function requireAuth(req: Request): Promise<VerifiedCaller | NextRe
     try {
         const decoded = await adminAuth().verifyIdToken(match[1]);
         return { uid: decoded.uid, email: decoded.email, token: decoded };
-    } catch {
+    } catch (e: any) {
+        console.error('[requireAuth] verifyIdToken failed:', e.message || e);
         return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 }

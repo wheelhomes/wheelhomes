@@ -92,7 +92,10 @@ class AuthService {
     required String email,
     required String name,
   }) async {
-    return await EmailService.requestVerificationOtp();
+    return await EmailService.requestVerificationOtp(
+      email: email,
+      name: name,
+    );
   }
 
   // Fetch User Profile

@@ -24,7 +24,23 @@ export async function POST(req: Request) {
             return tooManyRequests();
         }
 
-        const cleanEmail = (caller.email || '').trim();
+        const body = await req.json().catch(() => ({}));
+        let cleanEmail = (caller.email || body?.email || '').trim();
+
+        // If email not in token or body, resolve from user document
+        let userDocData: Record<string, any> | undefined;
+        try {
+            const userDoc = await adminDb().collection('users').doc(caller.uid).get();
+            if (userDoc.exists) {
+                userDocData = userDoc.data();
+                if (!cleanEmail) {
+                    cleanEmail = String(userDocData?.email || '').trim();
+                }
+            }
+        } catch (docErr) {
+            console.warn('[API send-verification-email] Warning resolving user doc:', docErr);
+        }
+
         if (!cleanEmail) {
             return NextResponse.json({ success: false, error: 'Account has no email address' }, { status: 400 });
         }
@@ -36,22 +52,26 @@ export async function POST(req: Request) {
         const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
 
         // Store hashed code in a private subcollection strictly inaccessible to client SDKs
-        await adminDb()
-            .collection('users')
-            .doc(caller.uid)
-            .collection('private_auth')
-            .doc('otp')
-            .set({
-                codeHash,
-                expiresAt,
-                attempts: 0,
-                createdAt: new Date().toISOString(),
-            });
+        try {
+            await adminDb()
+                .collection('users')
+                .doc(caller.uid)
+                .collection('private_auth')
+                .doc('otp')
+                .set({
+                    codeHash,
+                    expiresAt,
+                    attempts: 0,
+                    createdAt: new Date().toISOString(),
+                });
+        } catch (dbErr: any) {
+            console.error('[API send-verification-email] Firestore OTP store failed:', dbErr.message || dbErr);
+        }
 
         // Resolve display name for email body
-        const userDoc = await adminDb().collection('users').doc(caller.uid).get();
-        const data = userDoc.data();
-        let cleanName = String(data?.fullName || data?.name || data?.displayName || '').trim();
+        let cleanName = String(
+            userDocData?.fullName || userDocData?.name || userDocData?.displayName || body?.name || ''
+        ).trim();
         if (!cleanName) cleanName = formatNameFromEmail(cleanEmail);
 
         const baseUrl = getAppBaseUrl();

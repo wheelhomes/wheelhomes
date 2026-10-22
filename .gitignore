@@ -26,6 +26,8 @@
 *.log
 lint_results.txt
 seed_log.txt
+*service*account*.json
+service-account.json
 
 # debug
 npm-debug.log*

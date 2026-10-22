@@ -20,10 +20,28 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   final TextEditingController _otpController = TextEditingController();
   int _cooldown = 0;
   Timer? _timer;
+  Timer? _autoCheckTimer;
+  bool _isCheckingStatus = false;
 
   @override
   void initState() {
     super.initState();
+    // Periodically verify if the user clicked the activation link in their email
+    _autoCheckTimer = Timer.periodic(const Duration(seconds: 4), (_) => _autoCheckEmailVerified());
+  }
+
+  void _autoCheckEmailVerified() async {
+    if (!mounted) return;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isVerified = await authProvider.checkEmailVerified();
+    if (isVerified && mounted) {
+      _autoCheckTimer?.cancel();
+      AppSnackBar.showSuccess(
+        context,
+        'Email verified successfully!',
+        title: 'Verified',
+      );
+    }
   }
 
   void _startCooldown() {
@@ -43,6 +61,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   void dispose() {
     _otpController.dispose();
     _timer?.cancel();
+    _autoCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -78,6 +97,31 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
+  void _onCheckStatus() async {
+    if (_isCheckingStatus) return;
+    setState(() => _isCheckingStatus = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isVerified = await authProvider.checkEmailVerified();
+
+    if (mounted) {
+      setState(() => _isCheckingStatus = false);
+      if (isVerified) {
+        AppSnackBar.showSuccess(
+          context,
+          'Email verified successfully!',
+          title: 'Verified',
+        );
+      } else {
+        AppSnackBar.showInfo(
+          context,
+          'Email not verified yet. Please check your inbox or enter the 6-digit code.',
+          title: 'Not Verified Yet',
+        );
+      }
+    }
+  }
+
   void _onResend() async {
     if (_cooldown > 0) return;
     FocusScope.of(context).unfocus();
@@ -90,14 +134,14 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         _startCooldown();
         AppSnackBar.showInfo(
           context,
-          'A new 6-digit verification code has been sent to your email.',
-          title: 'Code Sent',
+          'A new 6-digit verification code and email link have been dispatched to your email.',
+          title: 'Verification Sent',
         );
       } else {
         AppSnackBar.showError(
           context,
           authProvider.errorMessage ?? 'Failed to resend code. Please try again.',
-          title: 'Error',
+          title: 'Notice',
         );
       }
     }
@@ -226,7 +270,35 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   onPressed: _onVerify,
                   height: 52,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                // Check Status (if user clicked email link)
+                OutlinedButton.icon(
+                  onPressed: _isCheckingStatus || authProvider.isLoading ? null : _onCheckStatus,
+                  icon: _isCheckingStatus
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                        )
+                      : const Icon(LucideIcons.mailCheck, size: 16),
+                  label: Text(
+                    _isCheckingStatus ? 'Checking status...' : 'I clicked the email link — Check Status',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primary,
+                    side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.25)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
 
                 const Divider(color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 16),

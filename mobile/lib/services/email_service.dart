@@ -124,40 +124,63 @@ class EmailService {
       );
 
       final success = response.statusCode >= 200 && response.statusCode < 300;
-      if (!success) {
-        debugPrint('[EmailService] Failed to verify OTP: ${response.body}');
+      if (success) {
+        debugPrint('[EmailService] OTP verified successfully.');
+        return true;
+      } else {
+        debugPrint('[EmailService] Failed to verify OTP (${response.statusCode}): ${response.body}');
+        String? serverError;
+        try {
+          final data = jsonDecode(response.body);
+          serverError = data['error'] ?? data['message'];
+        } catch (_) {}
+        throw Exception(serverError ?? 'Verification failed (${response.statusCode})');
       }
-      return success;
     } catch (e) {
       debugPrint('[EmailService] Failed to verify OTP via backend: $e');
-      return false;
+      rethrow;
     }
   }
 
   /// Requests a newly generated 6-digit verification code from the server
   static Future<bool> requestVerificationOtp({
+    String? email,
+    String? name,
     http.Client? client,
   }) async {
     try {
       final httpClient = client ?? http.Client();
       final uri = Uri.parse('$appBaseUrl/api/auth/send-verification-email');
 
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final targetEmail = email ?? currentUser?.email ?? '';
+
       final response = await httpClient.post(
         uri,
         headers: await _authHeaders(),
-        body: jsonEncode({}),
+        body: jsonEncode({
+          'email': targetEmail,
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        }),
       );
 
       final success = response.statusCode >= 200 && response.statusCode < 300;
       if (success) {
         debugPrint('[EmailService] Verification code requested successfully.');
+        return true;
       } else {
-        debugPrint('[EmailService] Failed to request verification code: ${response.body}');
+        debugPrint('[EmailService] Failed to request verification code (${response.statusCode}): ${response.body}');
+        String? serverError;
+        try {
+          final data = jsonDecode(response.body);
+          serverError = data['error'] ?? data['message'];
+        } catch (_) {}
+        throw Exception(serverError ?? 'Failed to request verification code (${response.statusCode})');
       }
-      return success;
     } catch (e) {
       debugPrint('[EmailService] Failed to request verification code: $e');
-      return false;
+      rethrow;
     }
   }
 }
+

@@ -20,6 +20,8 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _user != null;
+  bool get isEmailVerified =>
+      (_user?.emailVerified == true) || (_userProfile?.isEmailVerifiedGlobally == true);
 
   AuthProvider() {
     _authService.authStateChanges.listen((user) async {
@@ -113,6 +115,24 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> checkEmailVerified() async {
+    if (_user == null) return false;
+    try {
+      await _user!.reload();
+      final freshUser = FirebaseAuth.instance.currentUser;
+      _user = freshUser;
+      if (freshUser != null && freshUser.emailVerified) {
+        await fetchProfile(freshUser.uid);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[AuthProvider] checkEmailVerified error: $e');
+      return false;
+    }
+  }
+
   Future<bool> resendVerificationOtp() async {
     if (_user == null) return false;
     _setLoading(true);
@@ -128,13 +148,36 @@ class AuthProvider with ChangeNotifier {
           : (_user!.displayName?.trim().isNotEmpty ?? false)
               ? _user!.displayName!.trim()
               : '';
-      final success = await _authService.resendVerificationOtp(
-        uid: _user!.uid,
-        email: profile?.email ?? _user!.email ?? '',
-        name: resolvedName,
-      );
+      final resolvedEmail = profile?.email ?? _user!.email ?? '';
+
+      // 1. Dispatch custom transactional email verification OTP via backend
+      bool otpSent = false;
+      try {
+        otpSent = await _authService.resendVerificationOtp(
+          uid: _user!.uid,
+          email: resolvedEmail,
+          name: resolvedName,
+        );
+      } catch (backendErr) {
+        debugPrint('[AuthProvider] Backend OTP dispatch note: $backendErr');
+      }
+
+      // 2. Always dispatch Firebase native email verification link as resilient fallback
+      bool nativeSent = false;
+      try {
+        await _user!.sendEmailVerification();
+        nativeSent = true;
+        debugPrint('[AuthProvider] Native Firebase email verification link dispatched.');
+      } catch (nativeErr) {
+        debugPrint('[AuthProvider] Native Firebase email link error: $nativeErr');
+      }
+
       _setLoading(false);
-      return success;
+      if (otpSent || nativeSent) {
+        return true;
+      }
+      _setError('Failed to dispatch verification email. Please check your internet connection.');
+      return false;
     } catch (e) {
       _setError(AuthErrorHelper.format(e));
       _setLoading(false);
