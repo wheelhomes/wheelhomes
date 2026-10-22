@@ -8,6 +8,7 @@ import '../../core/design_system/design_system.dart';
 import '../../core/app_snackbar.dart';
 import '../../core/app_logo.dart';
 import '../../providers/auth_provider.dart';
+import '../../main.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
   const VerifyEmailScreen({super.key});
@@ -35,11 +36,20 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     final isVerified = await authProvider.checkEmailVerified();
     if (isVerified && mounted) {
       _autoCheckTimer?.cancel();
+      _timer?.cancel();
       AppSnackBar.showSuccess(
         context,
         'Email verified successfully!',
         title: 'Verified',
       );
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AuthWrapper()),
+            (route) => false,
+          );
+        }
+      });
     }
   }
 
@@ -81,11 +91,21 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
     if (mounted) {
       if (success) {
+        _timer?.cancel();
+        _autoCheckTimer?.cancel();
         AppSnackBar.showSuccess(
           context,
           'Email verified successfully!',
           title: 'Verified',
         );
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const AuthWrapper()),
+              (route) => false,
+            );
+          }
+        });
       } else {
         AppSnackBar.showError(
           context,

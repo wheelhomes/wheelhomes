@@ -14,6 +14,7 @@ class AuthProvider with ChangeNotifier {
   StreamSubscription<UserProfile?>? _profileSubscription;
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isEmailVerifiedLocally = false;
 
   User? get user => _user;
   UserProfile? get userProfile => _userProfile;
@@ -21,7 +22,9 @@ class AuthProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _user != null;
   bool get isEmailVerified =>
-      (_user?.emailVerified == true) || (_userProfile?.isEmailVerifiedGlobally == true);
+      _isEmailVerifiedLocally ||
+      (_user?.emailVerified == true) ||
+      (_userProfile?.isEmailVerifiedGlobally == true);
 
   AuthProvider() {
     _authService.authStateChanges.listen((user) async {
@@ -104,6 +107,14 @@ class AuthProvider with ChangeNotifier {
     try {
       final success = await _authService.verifyEmailOtp(uid: _user!.uid, code: code);
       if (success) {
+        _isEmailVerifiedLocally = true;
+        if (_userProfile != null) {
+          _userProfile = UserProfile.fromMap({
+            ..._userProfile!.rawData,
+            'emailVerified': true,
+            if (_userProfile!.status == 'unverified') 'status': 'verified',
+          }, _user!.uid);
+        }
         try {
           await _user?.reload();
           _user = FirebaseAuth.instance.currentUser;
@@ -122,12 +133,18 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> checkEmailVerified() async {
     if (_user == null) return false;
+    if (_isEmailVerifiedLocally) return true;
     try {
       await _user!.reload();
       final freshUser = FirebaseAuth.instance.currentUser;
       _user = freshUser;
       if (freshUser != null && freshUser.emailVerified) {
         await fetchProfile(freshUser.uid);
+        notifyListeners();
+        return true;
+      }
+      await fetchProfile(_user!.uid);
+      if (_userProfile?.isEmailVerifiedGlobally == true) {
         notifyListeners();
         return true;
       }
@@ -278,6 +295,7 @@ class AuthProvider with ChangeNotifier {
     await _authService.signOut();
     _user = null;
     _userProfile = null;
+    _isEmailVerifiedLocally = false;
     notifyListeners();
   }
 

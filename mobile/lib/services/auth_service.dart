@@ -83,6 +83,13 @@ class AuthService {
     if (!success) {
       throw Exception('Incorrect or expired verification code. Please check your email.');
     }
+    // Also persist verification in Firestore directly from client SDK
+    try {
+      await _firestore.collection('users').doc(uid).set({
+        'status': 'verified',
+        'verifiedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
     return true;
   }
 
