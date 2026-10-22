@@ -146,9 +146,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       _goToStep(_currentStep - 1);
     } else if (Navigator.canPop(context)) {
       Navigator.pop(context);
+    } else {
+      _showChangeRoleDialog();
     }
-    // At the root gate there is nowhere to go back to: verification must be
-    // completed (or the user can sign out / change role from the menu).
   }
 
   void _showChangeRoleDialog() {
@@ -519,16 +519,18 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           elevation: 0,
           backgroundColor: Colors.white,
           automaticallyImplyLeading: false,
-          leading: (_currentStep > 0 || Navigator.canPop(context))
-              ? IconButton(
-                  icon: Icon(
-                    _currentStep > 0 ? LucideIcons.arrowLeft : LucideIcons.x,
-                    color: AppTheme.textPrimary,
-                  ),
-                  tooltip: _currentStep > 0 ? 'Previous Step' : 'Close',
-                  onPressed: _handleBack,
-                )
-              : null,
+          leading: IconButton(
+            icon: Icon(
+              _currentStep > 0
+                  ? LucideIcons.arrowLeft
+                  : (Navigator.canPop(context) ? LucideIcons.x : LucideIcons.arrowLeft),
+              color: AppTheme.textPrimary,
+            ),
+            tooltip: _currentStep > 0
+                ? 'Previous Step'
+                : (Navigator.canPop(context) ? 'Close' : 'Change Account Type'),
+            onPressed: _handleBack,
+          ),
           title: Text(
             _getStepTitle(),
             style: const TextStyle(

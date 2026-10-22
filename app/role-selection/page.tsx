@@ -56,8 +56,7 @@ export default function RoleSelectionPage() {
             // Update Role in Firestore
             await updateDoc(doc(db, "users", user.uid), {
                 role: role,
-                emailVerified: true,
-                ...(preserveStatus ? {} : { status: role === 'user' ? 'approved' : 'unverified' })
+                updatedAt: new Date().toISOString()
             });
 
             // Redirect logic using replace to avoid history loops

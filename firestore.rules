@@ -271,7 +271,7 @@ service cloud.firestore {
         && (request.resource.data.get('status', '') != 'approved' || resource.data.get('status', '') == 'approved')
         && (resource.data.get('status', '') != 'approved' || request.resource.data.get('role', '') == resource.data.get('role', ''))
         && noneChanged([
-          'isAdmin', 'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason',
+          'isAdmin', 'approvedAt', 'approvedBy', 'rejectedAt',
           'suspended', 'isSuspended', 'rating', 'reviewCount', 'walletBalance', 'earnings',
           'emailVerified', 'verificationOtp'
         ])
