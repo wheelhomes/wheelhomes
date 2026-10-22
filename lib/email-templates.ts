@@ -60,6 +60,7 @@ export const emailWrapper = ({
   const currentYear = new Date().getFullYear();
   const baseUrl = getAppBaseUrl();
   const displayHost = baseUrl.replace(/^https?:\/\//, '');
+  const logoUrl = `${baseUrl}/images/logo.png`;
 
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -116,34 +117,25 @@ export const emailWrapper = ({
               <!-- Banner Main Content with Geometric Diagonal Accent -->
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                 <tr>
-                  <td style="padding: 32px 32px 24px 32px; background: linear-gradient(135deg, #0F172A 0%, #0B192C 45%, #0369A1 100%); position: relative;" class="mobile-padding">
+                  <td style="padding: 28px 32px 24px 32px; background: linear-gradient(135deg, #0F172A 0%, #0B192C 45%, #0369A1 100%); position: relative;" class="mobile-padding">
                     
-                    <!-- Brand Top Bar (Logo + Tagline) -->
+                    <!-- Brand Top Bar (Official Application Logo + Badge) -->
                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                       <tr>
                         <td align="left" valign="middle">
-                          <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-                            <tr>
-                              <!-- Interlocking Rings / Wheel Geometric Icon (from reference design) -->
-                              <td valign="middle" style="padding-right: 12px;">
-                                <div style="width: 38px; height: 38px; background: linear-gradient(135deg, #38BDF8 0%, #0284C7 100%); border-radius: 10px; text-align: center; line-height: 38px; box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);">
-                                  <span style="font-size: 20px; line-height: 38px;">🏡</span>
-                                </div>
-                              </td>
-                              <td valign="middle">
-                                <div style="font-size: 19px; font-weight: 800; letter-spacing: 0.04em; color: #FFFFFF; line-height: 1.1; text-transform: uppercase;">
-                                  Wheel of Comfort
-                                </div>
-                                <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #38BDF8; text-transform: uppercase; margin-top: 3px;">
-                                  Wheelhomes Platform
-                                </div>
-                              </td>
-                            </tr>
-                          </table>
+                          <a href="${baseUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                            <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="background-color: #FFFFFF; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);">
+                              <tr>
+                                <td style="padding: 6px 14px;" valign="middle">
+                                  <img src="${logoUrl}" alt="Wheel of Comfort &amp; Multipurpose Services" width="136" height="67" style="display: block; width: 136px; max-width: 136px; height: auto; max-height: 52px; border: 0; outline: none; text-decoration: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 700; color: #0F172A;" />
+                                </td>
+                              </tr>
+                            </table>
+                          </a>
                         </td>
                         <td align="right" valign="middle">
-                          <span style="display: inline-block; padding: 4px 12px; background-color: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: #E0F2FE; text-transform: uppercase;">
-                            Verified Service
+                          <span style="display: inline-block; padding: 6px 14px; background-color: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #E0F2FE; text-transform: uppercase;">
+                            Verified Platform
                           </span>
                         </td>
                       </tr>
@@ -279,7 +271,7 @@ export const emailWrapper = ({
                 <tr>
                   <td align="center">
                     <p style="margin: 0; font-size: 11px; color: #64748B; line-height: 1.5;">
-                      &copy; ${currentYear} <strong>Wheel of Comfort Technologies</strong>. All rights reserved.
+                      &copy; ${currentYear} <strong>Wheel of Comfort &amp; Multipurpose Services</strong>. All rights reserved.
                     </p>
                     <p style="margin: 4px 0 0 0; font-size: 10px; color: #475569;">
                       This is an official transactional message regarding your Wheel of Comfort / Wheelhomes account.
@@ -383,7 +375,7 @@ Email: wheelofcomfort@gmail.com
 Web: ${baseUrl}
 Location: Lagos, Nigeria
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
@@ -476,7 +468,7 @@ ${baseUrl}/signin
 Support: wheelofcomfort@gmail.com
 Web: ${baseUrl}
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
@@ -557,7 +549,7 @@ ${baseUrl}/settings/verification
 
 Questions? Contact: wheelofcomfort@gmail.com
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
@@ -675,7 +667,7 @@ ${baseUrl}/dashboard/pending
 Support: wheelofcomfort@gmail.com
 Web: ${baseUrl}
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
@@ -740,7 +732,7 @@ If you did not request this, you can safely ignore this email.
 Support: wheelofcomfort@gmail.com
 Web: ${baseUrl}
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
@@ -817,7 +809,7 @@ If you did not create an account, you can safely ignore this email.
 Support: wheelofcomfort@gmail.com
 Web: ${baseUrl}
 
-© ${new Date().getFullYear()} Wheel of Comfort Technologies. All rights reserved.
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
 `;
 };
 
