@@ -21,7 +21,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   int _cooldown = 0;
   Timer? _timer;
   Timer? _autoCheckTimer;
-  bool _isCheckingStatus = false;
 
   @override
   void initState() {
@@ -92,31 +91,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           context,
           authProvider.errorMessage ?? 'Invalid verification code. Please check your email.',
           title: 'Verification Failed',
-        );
-      }
-    }
-  }
-
-  void _onCheckStatus() async {
-    if (_isCheckingStatus) return;
-    setState(() => _isCheckingStatus = true);
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final isVerified = await authProvider.checkEmailVerified();
-
-    if (mounted) {
-      setState(() => _isCheckingStatus = false);
-      if (isVerified) {
-        AppSnackBar.showSuccess(
-          context,
-          'Email verified successfully!',
-          title: 'Verified',
-        );
-      } else {
-        AppSnackBar.showInfo(
-          context,
-          'Email not verified yet. Please check your inbox or enter the 6-digit code.',
-          title: 'Not Verified Yet',
         );
       }
     }
@@ -270,35 +244,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   onPressed: _onVerify,
                   height: 52,
                 ),
-                const SizedBox(height: 12),
-
-                // Check Status (if user clicked email link)
-                OutlinedButton.icon(
-                  onPressed: _isCheckingStatus || authProvider.isLoading ? null : _onCheckStatus,
-                  icon: _isCheckingStatus
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
-                        )
-                      : const Icon(LucideIcons.mailCheck, size: 16),
-                  label: Text(
-                    _isCheckingStatus ? 'Checking status...' : 'I clicked the email link — Check Status',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.primary,
-                    side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.25)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 24),
 
                 const Divider(color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 16),
