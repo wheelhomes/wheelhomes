@@ -31,67 +31,56 @@ export function ProviderSelectionList({ serviceType, selectedIds, onSelectionCha
         const fetchProviders = async () => {
             setIsLoading(true);
             try {
-                // Map modern service names to potential legacy synonyms to ensure we find everyone
-                // e.g. "Plumbing" (New) vs "Plumber" (Old)
-                const searchTerms = [serviceType];
-                if (serviceType === "Plumbing") searchTerms.push("Plumber");
-                if (serviceType === "Electrical") searchTerms.push("Electrician");
-                if (serviceType === "Carpentry") searchTerms.push("Carpenter");
-                if (serviceType === "Painting") searchTerms.push("Painter");
-                if (serviceType === "Cleaning") searchTerms.push("Cleaner");
-                if (serviceType === "Gardening") searchTerms.push("Gardener");
-                if (serviceType === "HVAC / AC") searchTerms.push("HVAC", "AC Repair");
-
-                console.log(`Searching for providers with services:`, searchTerms);
-
-                // Query 'users' where role='service_provider' AND services intersect with searchTerms
-                // Using array-contains-any
+                // Query strictly approved service providers (compliant with Firestore security rules)
                 const q = query(
                     collection(db, "users"),
                     where("role", "==", "service_provider"),
-                    where("services", "array-contains-any", searchTerms),
+                    where("status", "==", "approved"),
                     limit(50)
                 );
 
                 const snapshot = await getDocs(q);
-                // Security Guard: Providers must be approved by admin before appearing in client selection
-                const fetched = snapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as any))
-                    .filter(p => p.status === 'approved');
+                const allApproved = snapshot.docs
+                    .map(doc => {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            fullName: data.displayName || data.name || data.fullName || "Verified Specialist",
+                            businessName: data.businessName || data.companyName,
+                            location: data.location || data.city || data.coverageArea || "Lagos",
+                            rating: data.rating || 4.9,
+                            reviewCount: data.reviewCount || 0,
+                            avatar: data.photoUrl || data.avatarUrl || data.photoURL,
+                            status: 'available',
+                            services: data.services || (data.tradeCategory ? [data.tradeCategory] : []),
+                            tradeCategory: data.tradeCategory || data.category || data.profession,
+                            ...data
+                        } as any;
+                    })
+                    .filter(p => p.role === 'service_provider' && p.status === 'approved' || p.isApproved);
 
-                if (fetched.length > 0) {
-                    setProviders(fetched);
-                } else {
-                    // Fallback to client-side filter for broad matching if index is missing
-                    const qAll = query(collection(db, "users"), where("role", "==", "service_provider"), limit(50));
-                    const snapAll = await getDocs(qAll);
-                    const allProviders = snapAll.docs
-                        .map(d => ({ id: d.id, ...d.data() } as any))
-                        .filter(p => p.status === 'approved');
+                // Match with requested serviceType
+                const st = (serviceType || '').toLowerCase();
+                const matched = allApproved.filter(p => {
+                    const servicesList = Array.isArray(p.services) ? p.services.map((s: any) => String(s).toLowerCase()) : [];
+                    const trade = (p.tradeCategory || '').toLowerCase();
+                    const bio = (p.bio || '').toLowerCase();
 
-                    const filtered = allProviders.filter(p =>
-                        p.services?.some((s: string) => searchTerms.some(term =>
-                            s.toLowerCase() === term.toLowerCase() ||
-                            s.toLowerCase().includes(term.toLowerCase())
-                        ))
-                    );
-                    setProviders(filtered);
-                }
+                    return servicesList.some((s: string) => s.includes(st) || st.includes(s)) ||
+                        trade.includes(st) || st.includes(trade) ||
+                        bio.includes(st) ||
+                        (st.includes('plumb') && (trade.includes('plumb') || servicesList.some((s: string) => s.includes('plumb')))) ||
+                        (st.includes('elect') && (trade.includes('elect') || servicesList.some((s: string) => s.includes('elect')))) ||
+                        (st.includes('ac') || st.includes('hvac')) && (trade.includes('ac') || trade.includes('hvac') || servicesList.some((s: string) => s.includes('ac') || s.includes('hvac'))) ||
+                        (st.includes('carpent') && (trade.includes('carpent') || servicesList.some((s: string) => s.includes('carpent')))) ||
+                        (st.includes('paint') && (trade.includes('paint') || servicesList.some((s: string) => s.includes('paint')))) ||
+                        (st.includes('clean') && (trade.includes('clean') || servicesList.some((s: string) => s.includes('clean'))));
+                });
 
+                setProviders(matched.length > 0 ? matched : allApproved);
             } catch (error) {
-                console.error("Failed to fetch providers", error);
-
-                // Final Last Resort Fallback (Client Side Only) if query totally failed
-                try {
-                    const qAll = query(collection(db, "users"), where("role", "==", "service_provider"), limit(20));
-                    const snapAll = await getDocs(qAll);
-                    const all = snapAll.docs
-                        .map(d => ({ id: d.id, ...d.data() } as any))
-                        .filter(p => p.status === 'approved');
-                    setProviders(all.filter(p => JSON.stringify(p).toLowerCase().includes(serviceType.toLowerCase())));
-                } catch (e) {
-                    console.error("Even fallback failed", e);
-                }
+                console.error("Failed to fetch verified providers", error);
+                setProviders([]);
             } finally {
                 setIsLoading(false);
             }

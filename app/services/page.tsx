@@ -1,52 +1,87 @@
 "use client";
 
-import { Wrench, Zap, Droplet, Paintbrush, Hammer, Truck, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
-
-const SERVICES = [
-    { name: "Plumbing", icon: Droplet, desc: "Leak repairs, installations, and pipe maintenance." },
-    { name: "Electrical", icon: Zap, desc: "Wiring, inspections, and emergency repairs." },
-    { name: "Cleaning", icon: Paintbrush, desc: "Deep cleaning, move-in/out services." },
-    { name: "Carpentry", icon: Hammer, desc: "Custom furniture, repairs, and installations." },
-    { name: "HVAC", icon: Wrench, desc: "Heating, ventilation, and air conditioning service." },
-    { name: "Moving", icon: Truck, desc: "Professional packing and moving assistance." },
-    { name: "General Repair", icon: Wrench, desc: "Handyman services for various home needs." },
-    { name: "Security", icon: ShieldCheck, desc: "System installation and security assessments." },
-];
+import VerifiedProvidersDirectory from "@/components/services/VerifiedProvidersDirectory";
+import { useServiceCategories, getLucideIcon } from "@/lib/service-categories";
 
 export default function ServicesPage() {
+    const { activeCategories } = useServiceCategories();
+
     return (
         <main className="min-h-screen bg-gray-50">
-
             {/* Hero */}
             <section className="bg-accent pt-32 pb-20 text-white">
                 <Container className="text-center">
-                    <h1 className="text-4xl md:text-6xl font-bold font-heading mb-6">Verified Professional Services</h1>
+                    <h1 className="text-4xl md:text-6xl font-bold font-heading mb-6">
+                        Verified Professional Services
+                    </h1>
                     <p className="text-xl text-gray-300 max-w-2xl mx-auto">
                         Get access to a network of admin-approved, background-checked professionals for all your property needs.
                     </p>
                 </Container>
             </section>
 
-            {/* Services Grid */}
-            <section className="py-20">
+            {/* Verified Providers Directory */}
+            <section className="py-12 -mt-10">
                 <Container>
+                    <VerifiedProvidersDirectory />
+                </Container>
+            </section>
+
+            {/* Services Grid (Live Active Categories from Admin Config) */}
+            <section className="py-12 border-t border-gray-100">
+                <Container>
+                    <div className="mb-10 text-center">
+                        <h2 className="text-3xl font-bold text-gray-900 font-heading">
+                            Active Service Categories ({activeCategories.length})
+                        </h2>
+                        <p className="text-gray-500 text-sm mt-1">
+                            Explore all active trade categories covered by our verified technician network
+                        </p>
+                    </div>
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {SERVICES.map((service, idx) => (
-                            <div key={idx} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer">
-                                <div className="w-14 h-14 rounded-full bg-gray-50 flex items-center justify-center mb-6 group-hover:bg-primary/10 group-hover:text-primary transition-colors text-gray-500">
-                                    <service.icon className="w-7 h-7" />
+                        {activeCategories.map((service) => {
+                            const Icon = getLucideIcon(service.iconKey);
+                            return (
+                                <div
+                                    key={service.id}
+                                    className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
+                                >
+                                    <div>
+                                        <div
+                                            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110"
+                                            style={{
+                                                backgroundColor: `${service.colorHex}18`,
+                                                color: service.colorHex,
+                                            }}
+                                        >
+                                            <Icon className="w-7 h-7" />
+                                        </div>
+                                        <h3 className="text-xl font-bold text-accent mb-2 group-hover:text-primary transition-colors">
+                                            {service.name}
+                                        </h3>
+                                        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                                            {service.description}
+                                        </p>
+                                    </div>
+                                    <Link
+                                        href={`/dashboard/user?category=${encodeURIComponent(service.name)}`}
+                                    >
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            fullWidth
+                                            className="group-hover:bg-primary group-hover:text-white group-hover:border-primary"
+                                        >
+                                            Request Service
+                                        </Button>
+                                    </Link>
                                 </div>
-                                <h3 className="text-xl font-bold text-accent mb-3 group-hover:text-primary transition-colors">{service.name}</h3>
-                                <p className="text-gray-500 text-sm mb-6 leading-relaxed">
-                                    {service.desc}
-                                </p>
-                                <Button variant="outline" size="sm" fullWidth className="group-hover:bg-primary group-hover:text-white group-hover:border-primary">
-                                    Request Service
-                                </Button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </Container>
             </section>
@@ -60,9 +95,11 @@ export default function ServicesPage() {
                                 <ShieldCheck className="w-8 h-8" />
                             </div>
                             <div>
-                                <h3 className="text-2xl font-bold text-accent mb-2">100% Vetted & Verified</h3>
+                                <h3 className="text-2xl font-bold text-accent mb-2">
+                                    100% Vetted & Verified
+                                </h3>
                                 <p className="text-gray-600 max-w-lg">
-                                    We don't just list anyone. Every provider on Wheel of Comfort undergoes a rigorous background check and skill assessment before they can accept jobs.
+                                    We don&apos;t just list anyone. Every provider on Wheel of Comfort undergoes a rigorous background check and skill assessment before they can accept jobs.
                                 </p>
                             </div>
                         </div>
@@ -72,7 +109,6 @@ export default function ServicesPage() {
                     </div>
                 </Container>
             </section>
-
         </main>
     );
 }

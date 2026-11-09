@@ -13,10 +13,47 @@ class ChatService {
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
-          .toList();
+      return snapshot.docs.map((doc) {
+        final data = Map<String, dynamic>.from(doc.data());
+        final rawSenderName = (data['senderName'] ?? '').toString().trim();
+        if (rawSenderName.isEmpty ||
+            rawSenderName == 'You' ||
+            rawSenderName == 'User') {
+          data['senderName'] =
+              data['role'] == 'provider' ? 'Service Provider' : 'Client';
+        }
+        return ChatMessage.fromMap(data, doc.id);
+      }).toList();
     });
+  }
+
+  /// Stream job document metadata for read/delivery receipt fallbacks
+  Stream<Map<String, dynamic>> streamJobMetadata(String jobId) {
+    return _firestore
+        .collection('job_requests')
+        .doc(jobId)
+        .snapshots()
+        .map((snap) => snap.data() ?? <String, dynamic>{});
+  }
+
+  /// Mark incoming messages in a job chat as read when the chat screen is open
+  Future<void> markJobMessagesAsRead({
+    required String jobId,
+    required String currentUserId,
+    required String role,
+  }) async {
+    final isProvider = role == 'provider' || role == 'service_provider';
+    final readField = isProvider ? 'providerLastReadAt' : 'clientLastReadAt';
+    final deliveredField =
+        isProvider ? 'providerLastDeliveredAt' : 'clientLastDeliveredAt';
+
+    try {
+      await _firestore.collection('job_requests').doc(jobId).update({
+        readField: FieldValue.serverTimestamp(),
+        deliveredField: FieldValue.serverTimestamp(),
+        'lastMessageStatus': 'read',
+      });
+    } catch (_) {}
   }
 
   /// Send message inside a job request
@@ -27,26 +64,77 @@ class ChatService {
     required String senderName,
     required String role,
   }) async {
+    final cleanText = text.trim();
+    final isProviderSender = role == 'provider' || role == 'service_provider';
+    final readField =
+        isProviderSender ? 'providerLastReadAt' : 'clientLastReadAt';
+    final deliveredField =
+        isProviderSender ? 'providerLastDeliveredAt' : 'clientLastDeliveredAt';
+
     final messageData = {
-      'text': text.trim(),
+      'text': cleanText,
       'senderId': senderId,
       'senderName': senderName,
       'role': role,
+      'status': 'sent',
+      'delivered': false,
+      'read': false,
       'createdAt': FieldValue.serverTimestamp(),
     };
 
-    await _firestore
-        .collection('job_requests')
-        .doc(jobId)
-        .collection('messages')
-        .add(messageData);
+    final jobRef = _firestore.collection('job_requests').doc(jobId);
 
-    // Also update lastMessage on the job request if available
-    try {
-      await _firestore.collection('job_requests').doc(jobId).update({
-        'lastMessage': text.trim(),
+    await Future.wait([
+      jobRef.collection('messages').add(messageData),
+      jobRef.update({
+        'lastMessage': cleanText,
+        'lastMessageSenderId': senderId,
+        'lastMessageSenderName': senderName,
+        'lastMessageStatus': 'sent',
         'lastMessageTime': FieldValue.serverTimestamp(),
-      });
+        readField: FieldValue.serverTimestamp(),
+        deliveredField: FieldValue.serverTimestamp(),
+      }).catchError((_) {}),
+    ]);
+
+    // Also notify counterparty
+    try {
+      final jobSnap = await jobRef.get();
+      if (jobSnap.exists && jobSnap.data() != null) {
+        final jd = jobSnap.data()!;
+        final isProviderSender =
+            role == 'provider' || role == 'service_provider';
+        final targetUid = isProviderSender
+            ? (jd['clientId'] ?? jd['userId'] ?? '').toString()
+            : (jd['providerId'] ?? jd['hodId'] ?? '').toString();
+        final reqCode = (jd['requestCode'] ??
+                jd['trackingId'] ??
+                jobId.substring(0, 6).toUpperCase())
+            .toString();
+
+        if (targetUid.isNotEmpty && targetUid != senderId) {
+          final preview = cleanText.length > 120
+              ? '${cleanText.substring(0, 117)}...'
+              : cleanText;
+          await _firestore.collection('notifications').add({
+            'userId': targetUid,
+            'recipientId': targetUid,
+            'title': 'New Message from $senderName (#$reqCode) 💬',
+            'message': preview,
+            'body': preview,
+            'type': 'chat',
+            'read': false,
+            'isRead': false,
+            'createdAt': DateTime.now().toIso8601String(),
+            'payload': {
+              'jobId': jobId,
+              'requestCode': reqCode,
+              'title': jd['serviceType'] ?? 'Service Request',
+              'subtitle': senderName,
+            },
+          });
+        }
+      }
     } catch (_) {
       // Ignored if document structure differs
     }

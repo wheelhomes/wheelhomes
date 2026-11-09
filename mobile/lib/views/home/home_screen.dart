@@ -3,14 +3,17 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../core/app_logo.dart';
+import '../../core/chat_sound.dart';
 import '../../core/image_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/property_provider.dart';
 import '../../providers/request_provider.dart';
+import '../../providers/call_provider.dart';
 import '../../providers/payment_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../models/property_model.dart';
 import '../../models/request_model.dart';
+import '../../models/user_model.dart';
 import '../requests/create_request_screen.dart';
 import '../requests/request_detail_screen.dart';
 import '../property/property_detail_screen.dart';
@@ -26,6 +29,8 @@ import '../provider/provider_jobs_tab.dart';
 import '../provider/provider_market_tab.dart';
 import '../provider/provider_messages_tab.dart';
 import '../provider/provider_hub_tab.dart';
+import '../providers/verified_providers_screen.dart';
+import '../../providers/service_provider_directory_provider.dart';
 import '../../services/update_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -50,6 +55,11 @@ class _HomeScreenState extends State<HomeScreen> {
         reqProvider.listenToProviderJobs(user.uid);
         Provider.of<PaymentProvider>(context, listen: false).listenToUserTransactions(user.uid);
         Provider.of<NotificationProvider>(context, listen: false).listenToNotifications(user.uid);
+        final authProfile = Provider.of<AuthProvider>(context, listen: false).userProfile;
+        Provider.of<CallProvider>(context, listen: false).listenForIncomingCalls(
+          user.uid,
+          authProfile?.fullName ?? user.displayName ?? 'Wheelhomes User',
+        );
       }
       // Silently check if a newer app version is available
       UpdateService.checkAndPromptUpdate(context);
@@ -99,11 +109,239 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final effectiveIndex = _currentIndex.clamp(0, tabs.length - 1);
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: IndexedStack(
-        index: effectiveIndex,
-        children: tabs,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (_currentIndex != 0) {
+            setState(() => _currentIndex = 0);
+          } else {
+            ChatSoundHelper.moveTaskToBack();
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.background,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: effectiveIndex,
+            children: tabs,
+          ),
+          Consumer<NotificationProvider>(
+            builder: (context, notifProvider, _) {
+              final banner = notifProvider.activeBanner;
+              if (banner == null) return const SizedBox.shrink();
+
+              final cat = banner.category;
+              final isChat = cat == 'chat';
+              final isEscrow = cat == 'escrow';
+              final isJob = cat == 'job_update';
+
+              final Color accentColor = isChat
+                  ? AppTheme.primary
+                  : isEscrow
+                      ? const Color(0xFF047857)
+                      : isJob
+                          ? Colors.amber[800]!
+                          : Colors.purple;
+
+              final IconData bannerIcon = isChat
+                  ? LucideIcons.messageSquare
+                  : isEscrow
+                      ? LucideIcons.shieldCheck
+                      : isJob
+                          ? LucideIcons.wrench
+                          : LucideIcons.bell;
+
+              return SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                    child: Material(
+                      elevation: 10,
+                      shadowColor: Colors.black.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.white,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          notifProvider.markAsRead(banner.id);
+                          notifProvider.dismissBanner();
+
+                          final reqProvider =
+                              Provider.of<RequestProvider>(context, listen: false);
+                          final jobId = banner.jobId;
+                          final allReqs = [
+                            ...reqProvider.userRequests,
+                            ...reqProvider.providerJobs,
+                            ...reqProvider.openMarketJobs,
+                          ];
+                          final matchingReq = jobId != null
+                              ? allReqs.where((r) => r.id == jobId).firstOrNull
+                              : null;
+
+                          if (isChat || banner.payload.containsKey('chatId')) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  title: matchingReq?.serviceType ??
+                                      banner.payload['title']?.toString() ??
+                                      'Chat Conversation',
+                                  subtitle: matchingReq?.location['address']
+                                          ?.toString() ??
+                                      banner.payload['subtitle']?.toString() ??
+                                      (banner.requestCode != null
+                                          ? '#${banner.requestCode}'
+                                          : 'Direct Message'),
+                                  jobId: jobId,
+                                ),
+                              ),
+                            );
+                          } else if (matchingReq != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    RequestDetailScreen(request: matchingReq),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.35),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  bannerIcon,
+                                  color: accentColor,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            banner.title,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13.5,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (banner.requestCode != null &&
+                                            banner.requestCode!.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: accentColor.withValues(
+                                                  alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              banner.requestCode!.startsWith('#')
+                                                  ? banner.requestCode!
+                                                  : '#${banner.requestCode}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: accentColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      banner.body,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary,
+                                        height: 1.3,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      isChat
+                                          ? 'Tap to open chat →'
+                                          : 'Tap to view details →',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: accentColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => notifProvider.dismissBanner(),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.x,
+                                    size: 14,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -153,6 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('List Property', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 )
               : null,
+      ),
     );
   }
 }
@@ -178,19 +417,24 @@ class _ExploreTab extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const AppLogo(height: 38),
-                          const SizedBox(height: 6),
-                          Text(
-                            Provider.of<AuthProvider>(context).userProfile?.role == 'agent'
-                                ? 'Browse the market & manage your listings'
-                                : 'Find your dream home',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const AppLogo(height: 38),
+                            const SizedBox(height: 6),
+                            Text(
+                              Provider.of<AuthProvider>(context).userProfile?.role == 'agent'
+                                  ? 'Browse the market & manage your listings'
+                                  : 'Find your dream home',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Row(
                         children: [
                           GestureDetector(
@@ -465,31 +709,47 @@ class _ExploreTab extends StatelessWidget {
                   if (Provider.of<AuthProvider>(context).userProfile?.role != 'service_provider') ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hire Skilled Artisans 🛠️',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
-                            ),
-                            const SizedBox(height: 2),
-                            const Text(
-                              'Verified technicians with escrow protection',
-                              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                            ),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Hire Skilled Artisans 🛠️',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Verified technicians with escrow protection',
+                                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const CreateRequestScreen()),
+                              MaterialPageRoute(builder: (_) => const VerifiedProvidersScreen()),
                             );
                           },
                           child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('Book Pro', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              Icon(LucideIcons.shieldCheck, size: 14, color: AppTheme.primary),
+                              SizedBox(width: 4),
+                              Text('All Specialists', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                               Icon(LucideIcons.chevronRight, size: 14),
                             ],
                           ),
@@ -497,63 +757,153 @@ class _ExploreTab extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _ServiceCategoryCard(
-                            title: 'Plumbing',
-                            subtitle: 'Pipes & Leaks',
-                            icon: LucideIcons.droplets,
-                            color: Color(0xFF047857),
-                            categoryName: 'Plumbing & Water Piping',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'Electrical',
-                            subtitle: 'Wiring & Power',
-                            icon: LucideIcons.zap,
-                            color: Color(0xFFD97706),
-                            categoryName: 'Electrical & Wiring Repair',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'AC / HVAC',
-                            subtitle: 'Cooling & Gas',
-                            icon: LucideIcons.fan,
-                            color: Color(0xFF0284C7),
-                            categoryName: 'AC & HVAC Servicing',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'Carpentry',
-                            subtitle: 'Doors & Wood',
-                            icon: LucideIcons.hammer,
-                            color: Color(0xFFB45309),
-                            categoryName: 'General Handyman & Carpentry',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'Painting',
-                            subtitle: 'Wall & Finish',
-                            icon: LucideIcons.paintBucket,
-                            color: Color(0xFF7C3AED),
-                            categoryName: 'Painting & Renovation',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'Roofing',
-                            subtitle: 'Ceiling Repair',
-                            icon: LucideIcons.home,
-                            color: Color(0xFFE11D48),
-                            categoryName: 'Roofing & Ceiling Leak',
-                          ),
-                          _ServiceCategoryCard(
-                            title: 'Cleaning',
-                            subtitle: 'Deep Clean',
-                            icon: LucideIcons.sparkles,
-                            color: Color(0xFF0D9488),
-                            categoryName: 'Cleaning & Fumigation',
-                          ),
-                        ],
+
+                    // Quick Search Bar for Verified Artisans
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const VerifiedProvidersScreen()),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.search, size: 17, color: AppTheme.primary),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Search verified plumbers, electricians, carpenters...',
+                                style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(LucideIcons.shieldCheck, size: 11, color: Color(0xFF047857)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Verified Only',
+                                    style: TextStyle(
+                                      color: Color(0xFF047857),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+
+                    Consumer<ServiceProviderDirectoryProvider>(
+                      builder: (context, dirProvider, _) {
+                        final activeCategories = dirProvider.activeCategoryItems;
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: activeCategories
+                                .map(
+                                  (cat) => _ServiceCategoryCard(
+                                    title: cat.shortTitle,
+                                    subtitle: cat.subtitle,
+                                    icon: cat.icon,
+                                    color: cat.color,
+                                    categoryName: cat.name,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Top Verified Artisans Preview Row
+                    Consumer<ServiceProviderDirectoryProvider>(
+                      builder: (context, dirProvider, _) {
+                        final verifiedList = dirProvider.allVerifiedProviders;
+                        if (verifiedList.isEmpty) return const SizedBox.shrink();
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Expanded(
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.shieldCheck, size: 15, color: Color(0xFF047857)),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Verified Specialists Available',
+                                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const VerifiedProvidersScreen()),
+                                    );
+                                  },
+                                  child: Text(
+                                    'See all (${dirProvider.totalVerifiedCount})',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              height: 138,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: verifiedList.length > 8 ? 8 : verifiedList.length,
+                                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                                itemBuilder: (context, idx) {
+                                  final p = verifiedList[idx];
+                                  return _VerifiedProviderPreviewCard(provider: p);
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        );
+                      },
+                    ),
+
                     // Escrow Protection Guarantee Micro-banner
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -587,7 +937,7 @@ class _ExploreTab extends StatelessWidget {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: ['All', 'Saved', 'Apartment', 'Studio', 'Villa', 'For Rent', 'For Sale'].map((cat) {
+                      children: ['All', 'Saved', 'Apartment', 'Studio', 'Villa', 'Duplex', 'Penthouse', 'For Rent', 'For Sale'].map((cat) {
                         final isSelected = propertyProvider.selectedCategory == cat;
                         final labelText = cat == 'Saved'
                             ? (propertyProvider.savedCount > 0 ? 'Saved (${propertyProvider.savedCount})' : 'Saved')
@@ -679,6 +1029,30 @@ class _ExploreTab extends StatelessWidget {
                           icon: const Icon(LucideIcons.rotateCcw, size: 16),
                           label: const Text('Reset Filters'),
                         ),
+                      ] else ...[
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            final userProfile = authProvider.userProfile;
+                            if (userProfile?.role == 'agent' && !userProfile!.isVerified) {
+                              _showVerificationGatingSheet(context, role: 'agent');
+                              return;
+                            }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CreatePropertyScreen()),
+                            );
+                          },
+                          icon: const Icon(LucideIcons.plus, size: 16),
+                          label: const Text('List a Property'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -769,6 +1143,133 @@ class _ServiceCategoryCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 10.5, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VerifiedProviderPreviewCard extends StatelessWidget {
+  final UserProfile provider;
+
+  const _VerifiedProviderPreviewCard({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final isHod = provider.rawData['isHod'] == true;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CreateRequestScreen(
+              initialCategory: provider.serviceCategory,
+              targetProviderId: isHod ? provider.uid : null,
+              targetProviderName: isHod ? provider.fullName : null,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isHod ? const Color(0xFF7C3AED).withValues(alpha: 0.35) : AppTheme.border,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                  child: Text(
+                    provider.fullName.isNotEmpty ? provider.fullName[0].toUpperCase() : 'P',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        provider.fullName,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            isHod ? LucideIcons.crown : LucideIcons.shieldCheck,
+                            size: 10,
+                            color: isHod ? const Color(0xFF7C3AED) : const Color(0xFF047857),
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            isHod ? 'State HOD' : 'Verified',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: isHod ? const Color(0xFF7C3AED) : const Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                provider.serviceCategory ?? 'Specialist',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(LucideIcons.star, size: 12, color: Color(0xFFF59E0B)),
+                    const SizedBox(width: 2),
+                    Text(
+                      provider.rating.toStringAsFixed(1),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const Text(
+                  'Book >',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                ),
+              ],
             ),
           ],
         ),
@@ -986,13 +1487,66 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('My Service Requests 🛠️', style: Theme.of(context).textTheme.headlineMedium),
-                    const SizedBox(height: 4),
-                    Text('Track maintenance, repairs, and escrow status', style: Theme.of(context).textTheme.bodyMedium),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('My Service Requests 🛠️', style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 4),
+                      Text('Track maintenance, repairs, and escrow status', style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Consumer<NotificationProvider>(
+                  builder: (context, notifProvider, _) {
+                    final count = notifProvider.unreadCount;
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                        );
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.border),
+                            ),
+                            child: const Icon(LucideIcons.bell, size: 20, color: AppTheme.textPrimary),
+                          ),
+                          if (count > 0)
+                            Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.white, width: 1.5),
+                                ),
+                                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                child: Text(
+                                  count > 99 ? '99+' : '$count',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1094,15 +1648,20 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
 
   Widget _buildRequestCard(BuildContext context, ServiceRequestModel req) {
     final status = req.status.toLowerCase();
+    final isPending = status == 'pending' || status == 'open';
     final isCompleted = status == 'completed' || status == 'fully_completed';
+    final isAwaitingApproval = status == 'awaiting_confirmation' || status == 'partially_completed';
+    final isApproved = req.isClientApproved;
     final isUnpaid = req.paymentStatus == 'unpaid';
     final isHeld = req.paymentStatus == 'escrow_held';
     final hasRated = req.clientRating != null && req.clientRating! > 0;
+    final canChat = !isPending && status != 'cancelled' && status != 'rejected';
 
     final (statusLabel, statusColor, statusBg, statusIcon) = switch (status) {
-      'completed' || 'fully_completed' => ('COMPLETED', const Color(0xFF047857), const Color(0xFFECFDF5), LucideIcons.badgeCheck),
+      'completed' || 'fully_completed' => ('APPROVED & DONE', const Color(0xFF047857), const Color(0xFFECFDF5), LucideIcons.badgeCheck),
+      'awaiting_confirmation' || 'partially_completed' => ('APPROVAL NEEDED', const Color(0xFF4338CA), const Color(0xFFEEF2FF), LucideIcons.clipboardCheck),
       'in_progress' => ('IN PROGRESS', const Color(0xFF1D4ED8), const Color(0xFFEFF6FF), LucideIcons.wrench),
-      'assigned' => ('ASSIGNED', AppTheme.primary, AppTheme.primary.withValues(alpha: 0.1), LucideIcons.userCheck),
+      'assigned' || 'accepted' => ('ASSIGNED', AppTheme.primary, AppTheme.primary.withValues(alpha: 0.1), LucideIcons.userCheck),
       'cancelled' => ('CANCELLED', AppTheme.error, const Color(0xFFFEF2F2), LucideIcons.xCircle),
       _ => ('PENDING', const Color(0xFFD97706), const Color(0xFFFFFBEB), LucideIcons.clockAlert),
     };
@@ -1141,11 +1700,33 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      req.serviceType,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          req.serviceType,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3E8FF),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            '#${req.displayRequestCode}',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6B21A8),
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1221,7 +1802,7 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                   ] else
                     const SizedBox.shrink(),
 
-                  // Escrow Status Pill
+                  // Payment Status Pill (Strictly Gated by Client Approval)
                   if (isHeld)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1234,7 +1815,7 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                         children: [
                           Icon(LucideIcons.shieldCheck, size: 12, color: Color(0xFF047857)),
                           SizedBox(width: 4),
-                          Text('Escrow Secured 🔒', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
+                          Text('Paid (Escrow) 🔒', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
                         ],
                       ),
                     )
@@ -1250,18 +1831,27 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                         children: [
                           Icon(LucideIcons.checkCheck, size: 12, color: AppTheme.primary),
                           SizedBox(width: 4),
-                          Text('Paid & Released ✅', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                          Text('Paid & Settled ✅', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                         ],
                       ),
+                    )
+                  else if (isApproved)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('Approved • Ready to Pay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
                     )
                   else
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
+                        color: const Color(0xFFEEF2FF),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('Escrow Unpaid', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.error)),
+                      child: const Text('Pay After Job Approval 🔒', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4338CA))),
                     ),
                 ],
               ),
@@ -1273,7 +1863,28 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
               // Bottom Action Buttons
               Row(
                 children: [
-                  if (isUnpaid) ...[
+                  if (isAwaitingApproval && !isApproved) ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RequestDetailScreen(request: req),
+                            ),
+                          );
+                        },
+                        icon: const Icon(LucideIcons.checkCheck, size: 14),
+                        label: const Text('Inspect & Approve Job ✅', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF047857),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isUnpaid && isApproved) ...[
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
@@ -1284,8 +1895,8 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                             ),
                           );
                         },
-                        icon: const Icon(LucideIcons.lock, size: 14),
-                        label: const Text('Pay Escrow 🔒', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        icon: const Icon(LucideIcons.creditCard, size: 14),
+                        label: const Text('Pay Now 💳', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primary,
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1332,30 +1943,48 @@ class _ServiceRequestsTabState extends State<_ServiceRequestsTab> {
                     const SizedBox(width: 8),
                   ],
 
-                  // Direct Chat
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            title: req.serviceType,
-                            subtitle: req.location['address'] ?? 'Service Request',
-                            jobId: req.id,
+                  // Direct Chat (Only unlocked after HOD accepts the request)
+                  if (canChat) ...[
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              title: req.serviceType,
+                              subtitle: req.location['address'] ?? 'Service Request',
+                              jobId: req.id,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(LucideIcons.messageSquare, size: 14),
-                    label: const Text('Chat', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primary,
-                      side: const BorderSide(color: AppTheme.border),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      visualDensity: VisualDensity.compact,
+                        );
+                      },
+                      icon: const Icon(LucideIcons.messageSquare, size: 14),
+                      label: const Text('Chat', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primary,
+                        side: const BorderSide(color: AppTheme.border),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ] else if (isPending) ...[
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.clock, size: 13, color: Colors.grey[500]),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              'Chat unlocks when HOD accepts',
+                              style: TextStyle(fontSize: 11.5, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // View Details Icon Arrow
                   IconButton(
@@ -1438,7 +2067,9 @@ class _ProfileTab extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Account Profile 👤', style: Theme.of(context).textTheme.headlineMedium),
+                Expanded(
+                  child: Text('Account Profile 👤', style: Theme.of(context).textTheme.headlineMedium),
+                ),
                 TextButton.icon(
                   onPressed: () => _confirmSignOut(context, authProvider),
                   icon: const Icon(LucideIcons.logOut, size: 16, color: AppTheme.error),
@@ -1509,11 +2140,12 @@ class _ProfileTab extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Notifications & Alerts Tile
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.border),
+                side: const BorderSide(color: AppTheme.border),
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1560,11 +2192,12 @@ class _ProfileTab extends StatelessWidget {
 
             // Payments & Escrow Tile (clients pay, providers get paid)
             if (userProfile?.role != 'agent') ...[
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.border),
+                side: const BorderSide(color: AppTheme.border),
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1600,11 +2233,12 @@ class _ProfileTab extends StatelessWidget {
 
             // Identity Verification Tile (providers & agents only)
             if (userProfile?.role == 'service_provider' || userProfile?.role == 'agent') ...[
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.border),
+                side: const BorderSide(color: AppTheme.border),
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1728,11 +2362,12 @@ class _ProfileTab extends StatelessWidget {
           const SizedBox(height: 12),
 
           // App Version & Check Updates Tile
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
+          Material(
+            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.border),
+              side: const BorderSide(color: AppTheme.border),
             ),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

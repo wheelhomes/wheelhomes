@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, updateDoc, setDoc } from "firebase/firestore";
+import { useServiceCategories } from "@/lib/service-categories";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { compressImageToBase64 } from "@/lib/image-utils";
 import Link from "next/link";
@@ -43,6 +44,7 @@ export default function ProviderSettingsPage() {
     const [resetSent, setResetSent] = useState(false);
 
     // Profile state
+    const { activeCategories } = useServiceCategories();
     const [user, setUser] = useState<any>(null);
     const [formData, setFormData] = useState({
         fullName: "",
@@ -456,16 +458,17 @@ export default function ProviderSettingsPage() {
                                     onChange={(e) => setFormData({ ...formData, serviceCategory: e.target.value })}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm font-medium text-gray-900 bg-white"
                                 >
-                                    <option value="Plumbing">Plumbing Services</option>
-                                    <option value="Electrical">Electrical Repairs & Installation</option>
-                                    <option value="Carpentry">Carpentry & Woodwork</option>
-                                    <option value="Painting">Painting & Wall Finishing</option>
-                                    <option value="AC & HVAC">Air Conditioning & HVAC</option>
-                                    <option value="Cleaning">Deep Cleaning & Fumigation</option>
-                                    <option value="Masonry">Masonry & Tiling</option>
-                                    <option value="Generator Repair">Generator Repair & Maintenance</option>
-                                    <option value="Roofing">Roofing & Leak Fixing</option>
-                                    <option value="General Maintenance">General Artisan Maintenance</option>
+                                    {formData.serviceCategory &&
+                                        !activeCategories.some((c) => c.name === formData.serviceCategory) && (
+                                            <option value={formData.serviceCategory}>
+                                                {formData.serviceCategory}
+                                            </option>
+                                        )}
+                                    {activeCategories.map((cat) => (
+                                        <option key={cat.id} value={cat.name}>
+                                            {cat.name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 

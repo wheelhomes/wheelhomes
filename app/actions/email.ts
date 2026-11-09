@@ -10,6 +10,10 @@ import {
     approvalEmailText,
     pendingReviewEmailTemplate,
     pendingReviewEmailText,
+    hodAppointmentEmailTemplate,
+    hodAppointmentEmailText,
+    hodJobDispatchEmailTemplate,
+    hodJobDispatchEmailText,
 } from '@/lib/email-templates';
 
 export async function sendWelcomeEmailAction(email: string, name: string) {
@@ -116,5 +120,76 @@ export async function sendPendingReviewEmailAction(email: string, name: string) 
         return { success: false, error };
     }
 }
+
+export async function sendHodAppointmentEmailAction(params: {
+    email: string;
+    name: string;
+    categoryName: string;
+    stateName: string;
+}) {
+    const cleanEmail = params.email ? params.email.trim() : '';
+    if (!cleanEmail) {
+        console.warn('[HOD Appointment Email] ⚠️ No email provided — skipping.');
+        return { success: false, error: 'Recipient email is required' };
+    }
+
+    try {
+        const html = hodAppointmentEmailTemplate({
+            name: params.name || 'Service Partner',
+            categoryName: params.categoryName,
+            stateName: params.stateName,
+        });
+        const text = hodAppointmentEmailText({
+            name: params.name || 'Service Partner',
+            categoryName: params.categoryName,
+            stateName: params.stateName,
+        });
+        const result = await sendEmail({
+            to: cleanEmail,
+            subject: `Wheel of Comfort: Appointed as ${params.stateName} State HOD (${params.categoryName})`,
+            html,
+            text,
+        });
+        console.log(`[HOD Appointment Email] ✅ Sent to ${cleanEmail}:`, JSON.stringify(result));
+        return result;
+    } catch (error) {
+        console.error('[HOD Appointment Email] ❌ Failed to send HOD appointment email:', error);
+        return { success: false, error };
+    }
+}
+
+export async function sendHodJobDispatchEmailAction(params: {
+    email: string;
+    hodName: string;
+    categoryName: string;
+    stateName: string;
+    clientName: string;
+    location: string;
+    description: string;
+    preferredTime?: string;
+}) {
+    const cleanEmail = params.email ? params.email.trim() : '';
+    if (!cleanEmail) {
+        console.warn('[HOD Job Dispatch Email] ⚠️ No email provided — skipping.');
+        return { success: false, error: 'Recipient email is required' };
+    }
+
+    try {
+        const html = hodJobDispatchEmailTemplate(params);
+        const text = hodJobDispatchEmailText(params);
+        const result = await sendEmail({
+            to: cleanEmail,
+            subject: `Wheel of Comfort: New ${params.categoryName} Request in ${params.stateName} (HOD Dispatch)`,
+            html,
+            text,
+        });
+        console.log(`[HOD Job Dispatch Email] ✅ Sent to ${cleanEmail}:`, JSON.stringify(result));
+        return result;
+    } catch (error) {
+        console.error('[HOD Job Dispatch Email] ❌ Failed to send HOD job dispatch email:', error);
+        return { success: false, error };
+    }
+}
+
 
 

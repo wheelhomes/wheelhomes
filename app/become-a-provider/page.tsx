@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import Container from "@/components/ui/Container";
 import Button from "@/components/ui/Button";
 import { CheckCircle2, ShieldCheck, TrendingUp, Wallet } from "lucide-react";
+import { useServiceCategories } from "@/lib/service-categories";
 
 export default function BecomeProviderPage() {
     const router = useRouter();
+    const { activeCategories } = useServiceCategories();
     return (
         <main className="min-h-screen bg-white">
 
@@ -150,10 +152,11 @@ export default function BecomeProviderPage() {
                                 <input type="email" placeholder="Email Address" className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-primary" />
                                 <select className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-gray-500 focus:outline-none focus:border-primary">
                                     <option>Select your trade...</option>
-                                    <option>Plumbing</option>
-                                    <option>Electrical</option>
-                                    <option>HVAC</option>
-                                    <option>Cleaning</option>
+                                    {activeCategories.map((cat) => (
+                                        <option key={cat.id} value={cat.name}>
+                                            {cat.name}
+                                        </option>
+                                    ))}
                                 </select>
                                 <Button type="submit" fullWidth size="lg">Start Application</Button>
                             </form>

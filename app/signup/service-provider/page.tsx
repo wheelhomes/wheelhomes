@@ -6,6 +6,7 @@ import { ChevronLeft, Info, Upload, Image as ImageIcon, Eye, EyeOff, AlertCircle
 import { db } from "../../../lib/firebase";
 import { collection, query, where, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
 import { sendAdminAlert } from "../../../lib/notifications";
+import { useServiceCategories } from "@/lib/service-categories";
 
 function ServiceProviderForm() {
     const router = useRouter();
@@ -75,10 +76,8 @@ function ServiceProviderForm() {
         checkReapply();
     }, [searchParams]);
 
-    const servicesList = [
-        "Plumbing", "Electrical", "Carpentry", "Painting",
-        "AC Repair", "Cleaning", "Moving", "Landscaping"
-    ];
+    const { activeCategories } = useServiceCategories();
+    const servicesList = activeCategories.map((c) => c.name);
 
     const handleServiceChange = (service: string) => {
         setFormData(prev => {

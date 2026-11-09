@@ -9,7 +9,7 @@ import { RequestStatusBadge } from '@/components/requests/RequestStatusBadge';
 import { Timeline } from '@/components/requests/Timeline';
 import { ChatInterface } from '@/components/requests/ChatInterface';
 import { ReviewForm } from '@/components/requests/ReviewForm';
-import { ArrowLeft, Calendar, MapPin, DollarSign, ExternalLink, CheckCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, DollarSign, ExternalLink, CheckCircle, ShieldCheck, Shield, Users, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { sendNotification } from '@/lib/notifications';
 import { Suspense } from 'react';
@@ -31,6 +31,18 @@ interface RequestData {
         avatar?: string;
     };
     providerId?: string;
+    hodId?: string;
+    hodName?: string;
+    hodPhone?: string;
+    clientState?: string;
+    assignedAssistant?: {
+        name: string;
+        phone: string;
+        area?: string;
+    };
+    assistantName?: string;
+    assistantPhone?: string;
+    assistantArea?: string;
     budget?: number;
     completionDetails?: any;
 }
@@ -48,14 +60,11 @@ function RequestDetailContent() {
         const unsubscribe = onSnapshot(doc(db, "job_requests", id), (docFn) => {
             if (docFn.exists()) {
                 const data = docFn.data();
-                // Normalize data structure
                 setRequest({
                     id: docFn.id,
                     ...data,
                     location: typeof data.location === 'object' ? data.location.address || "Location" : data.location,
-                    // If provider details are not fully populated in request, we might need to fetch them. 
-                    // For now, assume simple provider structure or just ID.
-                    provider: data.providerId ? { id: data.providerId, name: "Service Provider" } : undefined
+                    provider: data.providerId ? { id: data.providerId, name: data.hodName || "Department HOD" } : undefined
                 } as RequestData);
             } else {
                 setRequest(null);
@@ -71,8 +80,7 @@ function RequestDetailContent() {
         if (!confirm("Are you sure you want to confirm this job as completed? This will close the job and release payment.")) return;
 
         try {
-            await RequestServices.confirmJobCompletion(request.id, 5, ""); // Default 5 star for now, or open modal
-            // Notification to Provider
+            await RequestServices.confirmJobCompletion(request.id, 5, "");
             if (request.providerId) {
                 await sendNotification(request.providerId, "Job Closed & Confirmed! 🌟", "Client has confirmed the job completion.", "success");
             }
@@ -90,20 +98,21 @@ function RequestDetailContent() {
         return <div className="min-h-screen flex items-center justify-center">Request not found</div>;
     }
 
-    // Dates for timeline
     const dates = {
         created: request.createdAt,
-        accepted: request.updatedAt, // Approximation
+        accepted: request.updatedAt,
         providerDone: request.actualEndTime,
         completed: request.completedAt || (request.status === 'fully_completed' ? request.updatedAt : undefined),
     };
 
     const isAwaitingConfirmation = request.status === 'awaiting_confirmation';
     const isCompleted = ['fully_completed', 'completed'].includes(request.status);
+    const assistantName = request.assistantName || request.assignedAssistant?.name;
+    const assistantPhone = request.assistantPhone || request.assignedAssistant?.phone;
+    const assistantArea = request.assistantArea || request.assignedAssistant?.area;
 
     return (
         <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
-            {/* Back Navigation */}
             <Link
                 href="/my-requests"
                 className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-6 transition-colors"
@@ -113,10 +122,8 @@ function RequestDetailContent() {
             </Link>
 
             <div className="flex flex-col lg:flex-row gap-8">
-                {/* Main Content */}
                 <div className="flex-1 space-y-6">
 
-                    {/* CONFIRMATION BANNER */}
                     {isAwaitingConfirmation && (
                         <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 shadow-sm animate-in fade-in slide-in-from-top-4">
                             <div className="flex items-start gap-4">
@@ -167,32 +174,50 @@ function RequestDetailContent() {
                                 <div className="bg-gray-50 px-4 py-3 rounded-lg border border-gray-100 min-w-[120px]">
                                     <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Budget</p>
                                     <p className="text-2xl font-bold text-gray-900 flex items-center">
-                                        <DollarSign className="w-5 h-5" />
-                                        {request.budget}
+                                        ₦{request.budget.toLocaleString()}
                                     </p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Provider Info */}
-                        {request.provider && (
-                            <div className="mt-6 pt-6 border-t border-gray-100 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
-                                        {request.provider.avatar ? (
-                                            <img src={request.provider.avatar} alt={request.provider.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="text-gray-500 font-bold text-xs">{request.provider.name.charAt(0)}</span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900">{request.provider.name}</p>
-                                        <p className="text-xs text-gray-500">Service Provider</p>
+                        {/* HOD & Dispatched Assistant Info */}
+                        {(request.provider || request.hodName || assistantName) && (
+                            <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-700 overflow-hidden flex items-center justify-center">
+                                            <Shield className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-900">{request.hodName || request.provider?.name || "Department HOD"}</p>
+                                            <p className="text-xs text-indigo-600 font-semibold">
+                                                Head of Department (HOD){request.clientState ? ` • ${request.clientState}` : ""}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-                                <button className="text-sm text-primary font-medium hover:underline flex items-center">
-                                    View Profile <ExternalLink className="w-3 h-3 ml-1" />
-                                </button>
+
+                                {assistantName && (
+                                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                                <Users className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Dispatched Field Assistant</p>
+                                                <p className="text-sm font-bold text-gray-900">
+                                                    {assistantName}
+                                                    {assistantArea ? <span className="text-xs font-normal text-gray-600"> • {assistantArea}</span> : null}
+                                                </p>
+                                                {assistantPhone && (
+                                                    <a href={`tel:${assistantPhone}`} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 hover:underline mt-0.5">
+                                                        <Phone className="w-3 h-3" /> {assistantPhone}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -203,7 +228,6 @@ function RequestDetailContent() {
                         <Timeline status={request.status} dates={dates} />
                     </div>
 
-                    {/* Review Section (Only if completed) */}
                     {isCompleted && <ReviewForm />}
                 </div>
 
@@ -212,10 +236,10 @@ function RequestDetailContent() {
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sticky top-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4 px-2">Messages</h3>
                         {request.provider ? (
-                            <ChatInterface requestId={request.id} providerName={request.provider.name} />
+                            <ChatInterface requestId={request.id} providerName={request.hodName || request.provider.name} />
                         ) : (
                             <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                                <p className="text-gray-500 text-sm">Chat will be available once a provider accepts your request.</p>
+                                <p className="text-gray-500 text-sm">Chat will be available once your Department HOD accepts your request.</p>
                             </div>
                         )}
                         {isCompleted && (

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/image_helper.dart';
 import '../../core/theme.dart';
+import '../../core/service_categories.dart';
 import '../../providers/auth_provider.dart';
 import 'pending_approval_screen.dart';
 
@@ -43,21 +44,13 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   String _uploadProgressText = '';
   bool _initializedFromProfile = false;
 
-  final List<String> _serviceCategories = [
-    'General Maintenance',
-    'Plumbing & Pipefitting',
-    'Electrical & Wiring',
-    'Carpentry & Woodwork',
-    'Painting & Wall Finishes',
-    'HVAC & AC Repair',
-    'Masonry, Tiling & Flooring',
-    'Roofing & Ceiling',
-    'Cleaning & Fumigation',
-    'Welding & Metal Fabrication',
-    'Landscaping & Gardening',
-    'Appliance Repair',
-    'Solar & Inverter Systems',
-  ];
+  List<String> get _serviceCategories {
+    final active = List<String>.from(ServiceCategories.list);
+    if (_selectedCategory.isNotEmpty && !active.contains(_selectedCategory)) {
+      active.insert(0, _selectedCategory);
+    }
+    return active;
+  }
 
   final List<Map<String, dynamic>> _idOptions = [
     {

@@ -7,6 +7,8 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { UserProfile } from "../../types/user";
 import { isEmailVerifiedGlobally } from "@/lib/auth-helpers";
+import { GlobalChatAlertListener } from "@/components/chat/GlobalChatAlertListener";
+import { GlobalCallManager } from "@/components/call/GlobalCallManager";
 import Link from "next/link";
 
 export default function DashboardLayout({
@@ -224,5 +226,26 @@ export default function DashboardLayout({
         }
     }
 
-    return <>{children}</>;
+    return (
+        <>
+            {auth.currentUser?.uid && (
+                <GlobalChatAlertListener
+                    userId={auth.currentUser.uid}
+                    userRole={userProfile.role}
+                />
+            )}
+            {auth.currentUser?.uid && (
+                <GlobalCallManager
+                    userId={auth.currentUser.uid}
+                    userName={
+                        (userProfile as any).fullName ||
+                        (userProfile as any).businessName ||
+                        auth.currentUser.displayName ||
+                        "Wheelhomes User"
+                    }
+                />
+            )}
+            {children}
+        </>
+    );
 }

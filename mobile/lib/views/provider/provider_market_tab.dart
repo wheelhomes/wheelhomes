@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/request_provider.dart';
+import '../../providers/service_provider_directory_provider.dart';
 import '../verification/document_upload_screen.dart';
 import '../verification/pending_approval_screen.dart';
 
@@ -17,41 +18,17 @@ class ProviderMarketTab extends StatefulWidget {
 }
 
 class _ProviderMarketTabState extends State<ProviderMarketTab> {
-  String _selectedTrade = 'All';
-
-  // 13 Canonical Service Categories matching Web & Registration 1:1
-  static const List<String> _tradeCategories = [
-    'All',
-    'General Maintenance',
-    'Plumbing & Pipefitting',
-    'Electrical & Wiring',
-    'Carpentry & Woodwork',
-    'Painting & Wall Finishes',
-    'HVAC & AC Repair',
-    'Masonry, Tiling & Flooring',
-    'Roofing & Ceiling',
-    'Cleaning & Fumigation',
-    'Welding & Metal Fabrication',
-    'Landscaping & Gardening',
-    'Appliance Repair',
-    'Solar & Inverter Systems',
-  ];
-
   @override
   Widget build(BuildContext context) {
+    Provider.of<ServiceProviderDirectoryProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
-    final user = authProvider.user;
     final userProfile = authProvider.userProfile;
     final requestProvider = Provider.of<RequestProvider>(context);
 
-    final openJobs = requestProvider.openMarketJobs;
-
-    final filteredOpenJobs = openJobs.where((j) {
-      if (_selectedTrade == 'All') return true;
-      final query = _selectedTrade.toLowerCase();
-      return j.serviceType.toLowerCase().contains(query) ||
-          query.contains(j.serviceType.toLowerCase());
-    }).toList();
+    final assignedJobs = requestProvider.providerAssignedJobs;
+    final pendingDispatchJobs = assignedJobs
+        .where((j) => j.status == 'pending' || j.status == 'open' || j.status == 'accepted' || j.status == 'assigned')
+        .toList();
 
     return SafeArea(
       child: Padding(
@@ -67,9 +44,12 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Job Market 💼', style: Theme.of(context).textTheme.headlineMedium),
+                      Text('HOD Dispatch Hub 🛡️', style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 4),
-                      Text('Find and claim open client service dispatches.', style: Theme.of(context).textTheme.bodyMedium),
+                      Text(
+                        'Direct State + Category HOD routing & assistant dispatch.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                     ],
                   ),
                 ),
@@ -77,12 +57,12 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.accent.withValues(alpha: 0.12),
+                    color: const Color(0xFFEEF2FF),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${openJobs.length} Available',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.accent),
+                    '${pendingDispatchJobs.length} Active',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF4338CA)),
                   ),
                 ),
               ],
@@ -127,10 +107,10 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                     Expanded(
                       child: Text(
                         userProfile.isRejected
-                            ? 'Verification update needed to accept jobs.'
+                            ? 'Verification update needed to receive HOD dispatches.'
                             : userProfile.isPendingReview
-                                ? 'KYC In Review: You will be able to claim jobs once approved.'
-                                : 'Complete identity verification to claim client jobs.',
+                                ? 'KYC In Review: You will receive department dispatches once approved.'
+                                : 'Complete identity verification to receive department dispatches.',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -168,64 +148,83 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
               const SizedBox(height: 14),
             ],
 
-            // 13 Trade Category Filter Chips
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _tradeCategories.map((trade) {
-                  final isSel = _selectedTrade == trade;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6.0),
-                    child: FilterChip(
-                      selected: isSel,
-                      label: Text(trade),
-                      labelStyle: TextStyle(
-                        color: isSel ? Colors.white : AppTheme.textPrimary,
-                        fontSize: 11.5,
-                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+            // Smart Routing Rule Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(LucideIcons.shieldCheck, color: Color(0xFFA5B4FC), size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '1 Request = 1 Category + 1 Location = 1 HOD',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                      selectedColor: AppTheme.primary,
-                      backgroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: isSel ? AppTheme.primary : AppTheme.border),
-                      ),
-                      onSelected: (_) => setState(() => _selectedTrade = trade),
+                    ],
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Client requests are no longer broadcast to an open market. Each request routes directly to the designated Head of Department (HOD) for that service in the client\'s State, who then dispatches the nearest Field Assistant.',
+                    style: TextStyle(
+                      color: Color(0xFFE0E7FF),
+                      fontSize: 11.5,
+                      height: 1.35,
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-            // Open Jobs List
+            // Department Dispatches List
             Expanded(
-              child: filteredOpenJobs.isEmpty
+              child: pendingDispatchJobs.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.store, size: 44, color: Colors.grey[400]),
+                          Icon(LucideIcons.shield, size: 44, color: Colors.grey[400]),
                           const SizedBox(height: 12),
-                          Text(
-                            _selectedTrade == 'All'
-                                ? 'No open jobs in the market right now.'
-                                : 'No jobs found for "$_selectedTrade".',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          const SizedBox(height: 4),
                           const Text(
-                            'Incoming client requests across Nigeria will appear here in real time.',
+                            'No Pending Department Dispatches',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'When a client in your State requests your service category (or your HOD dispatches you), the job will appear immediately in your My Jobs inbox.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.35),
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: widget.onViewJobInMyJobs,
+                            icon: const Icon(LucideIcons.briefcase, size: 16),
+                            label: const Text('Go to My Jobs & Dispatch'),
                           ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      itemCount: filteredOpenJobs.length,
+                      itemCount: pendingDispatchJobs.length,
                       itemBuilder: (context, index) {
-                        final job = filteredOpenJobs[index];
+                        final job = pendingDispatchJobs[index];
+                        final hasAssistant = job.assistantName != null && job.assistantName!.isNotEmpty;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(16),
@@ -233,13 +232,6 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: AppTheme.border),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.02),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,12 +248,16 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.accent.withValues(alpha: 0.1),
+                                      color: const Color(0xFFEEF2FF),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: const Text(
-                                      'OPEN MARKET',
-                                      style: TextStyle(color: AppTheme.accent, fontSize: 10, fontWeight: FontWeight.bold),
+                                    child: Text(
+                                      job.clientState != null ? '${job.clientState} HOD' : 'HOD DISPATCH',
+                                      style: const TextStyle(
+                                        color: Color(0xFF4338CA),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -288,26 +284,30 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                                   ],
                                 ),
                               ],
-                              if (job.images.isNotEmpty) ...[
+                              if (hasAssistant) ...[
                                 const SizedBox(height: 10),
-                                SizedBox(
-                                  height: 56,
-                                  child: ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: job.images.length,
-                                    itemBuilder: (context, i) => Container(
-                                      width: 56,
-                                      height: 56,
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: AppTheme.border),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.users, size: 14, color: Color(0xFF047857)),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Assistant Dispatched: ${job.assistantName}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF065F46),
+                                          ),
+                                        ),
                                       ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(job.images[i], fit: BoxFit.cover),
-                                      ),
-                                    ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -322,60 +322,17 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                                     children: [
                                       const Text('Client Budget:', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                                       Text(
-                                        job.price != null ? '₦${job.price!.toStringAsFixed(0)}' : 'To Negotiate',
+                                        job.price != null ? '₦${job.price!.toStringAsFixed(0)}' : 'Standard Rate',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primary),
                                       ),
                                     ],
                                   ),
                                   ElevatedButton.icon(
-                                    onPressed: requestProvider.isSubmitting
-                                        ? null
-                                        : () async {
-                                            if (user == null) return;
-                                            final profile = Provider.of<AuthProvider>(context, listen: false).userProfile;
-                                            if (profile == null || !profile.isVerified || profile.status != 'approved') {
-                                              _showGatingSheet(context);
-                                              return;
-                                            }
-                                            final messenger = ScaffoldMessenger.of(context);
-                                            final confirmed = await showDialog<bool>(
-                                              context: context,
-                                              builder: (ctx) => AlertDialog(
-                                                title: const Text('Accept Job Dispatch?'),
-                                                content: Text('Are you sure you want to accept this ${job.serviceType} job? You will be assigned as the provider.'),
-                                                actions: [
-                                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                                  ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Accept Job')),
-                                                ],
-                                              ),
-                                            );
-
-                                            if (confirmed != true) return;
-                                            if (!context.mounted) return;
-
-                                            final success = await requestProvider.acceptJob(
-                                              jobId: job.id,
-                                              providerId: user.uid,
-                                            );
-                                            if (!context.mounted) return;
-
-                                            if (success) {
-                                              messenger.showSnackBar(
-                                                const SnackBar(
-                                                  content: Text('Job accepted successfully! Switched to My Jobs. 🎉'),
-                                                  backgroundColor: AppTheme.accent,
-                                                ),
-                                              );
-                                              widget.onViewJobInMyJobs();
-                                            }
-                                          },
-                                    icon: Icon(
-                                      (userProfile?.isVerified == true) ? LucideIcons.checkCircle2 : LucideIcons.lock,
-                                      size: 16,
-                                    ),
-                                    label: Text((userProfile?.isVerified == true) ? 'Accept Job' : 'Verify to Accept'),
+                                    onPressed: widget.onViewJobInMyJobs,
+                                    icon: const Icon(LucideIcons.users, size: 15),
+                                    label: Text(hasAssistant ? 'Manage in My Jobs' : 'Dispatch Assistant'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: (userProfile?.isVerified == true) ? AppTheme.primary : const Color(0xFF64748B),
+                                      backgroundColor: const Color(0xFF4F46E5),
                                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
@@ -389,74 +346,6 @@ class _ProviderMarketTabState extends State<ProviderMarketTab> {
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showGatingSheet(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userProfile = authProvider.userProfile;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: const Icon(LucideIcons.shieldAlert, color: Color(0xFFB45309), size: 40),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Identity Verification Required',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'To protect homeowners and release escrow payments safely, service providers must submit their Government ID and Passport photograph before accepting customer jobs.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => userProfile?.isPendingReview == true
-                            ? const PendingApprovalScreen()
-                            : const DocumentUploadScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(LucideIcons.uploadCloud, size: 18),
-                  label: const Text('Upload Verification Documents'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Not Now, Continue Browsing', style: TextStyle(color: AppTheme.textSecondary)),
-              ),
-            ],
-          ),
         ),
       ),
     );

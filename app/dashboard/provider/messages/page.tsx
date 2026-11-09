@@ -6,15 +6,20 @@ import { db, auth } from "../../../../lib/firebase";
 import { collection, query, where, onSnapshot, getDoc, doc } from "firebase/firestore";
 import { UnifiedChat } from "@/components/chat/UnifiedChat";
 import { Search, MessageSquare, ChevronRight } from "lucide-react";
+import { formatRequestCode } from "@/lib/job-utils";
 
 interface ChatSession {
     jobId: string;
     clientId: string;
     clientName: string;
+    serviceType?: string;
     description: string;
     status: string;
+    requestCode?: string;
+    trackingId?: string;
     lastMessage?: string;
     lastMessageTime?: any;
+    createdAt?: any;
 }
 
 export default function ProviderMessagesPage() {
@@ -23,6 +28,7 @@ export default function ProviderMessagesPage() {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [providerName, setProviderName] = useState<string>("Service Provider");
     const [isLoading, setIsLoading] = useState(true);
 
     // Fetch Current User & Verify Status
@@ -39,6 +45,7 @@ export default function ProviderMessagesPage() {
                 const userDoc = await getDoc(doc(db, "users", storedId));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
+                    setProviderName(data.fullName || data.displayName || data.name || "Service Provider");
                     if (data.status !== 'approved') {
                         if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
@@ -55,81 +62,132 @@ export default function ProviderMessagesPage() {
         return () => unsubscribeAuth();
     }, [router]);
 
-    // Fetch Active Jobs for Messages
+    // Fetch Active Jobs for Messages (providerId, hodId, or invitedProviderIds)
     useEffect(() => {
         if (!currentUserId) return;
 
-        const q = query(
+        const q1 = query(
             collection(db, "job_requests"),
             where("providerId", "==", currentUserId)
         );
+        const q2 = query(
+            collection(db, "job_requests"),
+            where("invitedProviderIds", "array-contains", currentUserId)
+        );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const rawSessions = snapshot.docs.map(doc => {
-                const d = doc.data();
-                return {
-                    jobId: doc.id,
-                    clientId: d.clientId || d.userId || "",
-                    ...d
-                } as ChatSession;
+        let directDocs: any[] = [];
+        let invitedDocs: any[] = [];
+        const nameCache: Record<string, string> = {};
+
+        const toCleanClientName = (d: any, clientId: string): string => {
+            const raw = String(d.clientName || d.userName || d.customerName || "").trim();
+            if (raw && raw !== "Unknown Client" && raw !== "Client") return raw;
+            if (nameCache[clientId]) return nameCache[clientId];
+            if (clientId && clientId !== "guest-user") {
+                return `Client #${clientId.slice(0, 6).toUpperCase()}`;
+            }
+            return "Client";
+        };
+
+        const rebuildSessions = () => {
+            const mergedMap = new Map<string, ChatSession>();
+            [...directDocs, ...invitedDocs].forEach((docSnap) => {
+                const d = docSnap.data();
+                // Chat is unlocked only after HOD accepts or dispatches an assistant
+                if (["pending", "open", "rejected", "cancelled", "archived"].includes(String(d.status || ""))) {
+                    return;
+                }
+                const cId = String(d.clientId || d.userId || "");
+                mergedMap.set(docSnap.id, {
+                    jobId: docSnap.id,
+                    ...d,
+                    clientId: cId,
+                    clientName: toCleanClientName(d, cId),
+                } as ChatSession);
             });
 
-            // Set initial data immediately
-            setSessions(rawSessions);
+            const list = Array.from(mergedMap.values()).sort((a, b) => {
+                const tA = a.lastMessageTime?.seconds
+                    ? a.lastMessageTime.seconds * 1000
+                    : a.createdAt?.seconds
+                        ? a.createdAt.seconds * 1000
+                        : new Date(a.createdAt || 0).getTime();
+                const tB = b.lastMessageTime?.seconds
+                    ? b.lastMessageTime.seconds * 1000
+                    : b.createdAt?.seconds
+                        ? b.createdAt.seconds * 1000
+                        : new Date(b.createdAt || 0).getTime();
+                return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+            });
+
+            setSessions(list);
             setIsLoading(false);
 
-            // Fetch missing names in background and update
-            rawSessions.forEach(async (session) => {
-                if (session.clientId && (!session.clientName || session.clientName === "Unknown Client")) {
-                    // 1. Handle Guest User
-                    if (session.clientId === "guest-user") {
-                        setSessions(prev => prev.map(s =>
-                            s.jobId === session.jobId ? { ...s, clientName: "Guest Client (Unregistered)" } : s
-                        ));
-                        return;
-                    }
-
-                    try {
-                        // 2. Try 'users' collection first (Standard Users)
-                        const stdUserDoc = await getDoc(doc(db, "users", session.clientId));
-                        if (stdUserDoc.exists()) {
-                            const userData = stdUserDoc.data();
-                            const realName = userData.fullName || "Client";
-                            setSessions(prev => prev.map(s =>
-                                s.jobId === session.jobId ? { ...s, clientName: realName } : s
-                            ));
-                            return; // Found
+            // Attempt background name resolution if accessible
+            list.forEach(async (session) => {
+                if (!session.clientId || session.clientId === "guest-user" || nameCache[session.clientId]) return;
+                if (session.clientName && !session.clientName.startsWith("Client #")) return;
+                try {
+                    const stdUserDoc = await getDoc(doc(db, "users", session.clientId));
+                    if (stdUserDoc.exists()) {
+                        const userData = stdUserDoc.data();
+                        const realName = String(userData.fullName || userData.displayName || userData.name || "").trim();
+                        if (realName) {
+                            nameCache[session.clientId] = realName;
+                            setSessions(prev =>
+                                prev.map(s => (s.clientId === session.clientId ? { ...s, clientName: realName } : s))
+                            );
                         }
-
-                        // 3. Fallback: 'user_applications' (Pending/New Users)
-                        const userDoc = await getDoc(doc(db, "user_applications", session.clientId));
-                        if (userDoc.exists()) {
-                            const userData = userDoc.data();
-                            const realName = userData.fullName || userData.data?.fullName || "Applicant Client";
-
-                            setSessions(prev => prev.map(s =>
-                                s.jobId === session.jobId ? { ...s, clientName: realName } : s
-                            ));
-                        }
-                    } catch (e) {
-                        console.error("Error fetching name for", session.jobId, e);
                     }
+                } catch (_) {
+                    // Non-admin providers cannot read client user docs directly; fallback name is already clean
                 }
             });
-        }, (err) => {
-            console.warn("Messages query notice:", err);
-            setIsLoading(false);
-        });
+        };
 
-        return () => unsubscribe();
+        const unsub1 = onSnapshot(
+            q1,
+            (snap) => {
+                directDocs = snap.docs;
+                rebuildSessions();
+            },
+            (err) => {
+                console.warn("Messages direct query notice:", err);
+                setIsLoading(false);
+            }
+        );
+
+        const unsub2 = onSnapshot(
+            q2,
+            (snap) => {
+                invitedDocs = snap.docs;
+                rebuildSessions();
+            },
+            (err) => {
+                console.warn("Messages invited query notice:", err);
+                setIsLoading(false);
+            }
+        );
+
+        return () => {
+            unsub1();
+            unsub2();
+        };
     }, [currentUserId]);
 
     const activeSession = sessions.find(s => s.jobId === selectedJobId);
 
-    const filteredSessions = sessions.filter(s =>
-        s.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredSessions = sessions.filter(s => {
+        const q = searchTerm.trim().replace(/^#/, "").toLowerCase();
+        if (!q) return true;
+        const reqCode = formatRequestCode({ id: s.jobId, ...s }).toLowerCase();
+        return (
+            s.clientName?.toLowerCase().includes(q) ||
+            s.serviceType?.toLowerCase().includes(q) ||
+            s.description?.toLowerCase().includes(q) ||
+            reqCode.includes(q)
+        );
+    });
 
     return (
         <div className="flex h-[calc(100vh-64px)] bg-white">
@@ -169,17 +227,19 @@ export default function ProviderMessagesPage() {
                             >
                                 <div className="flex justify-between items-start mb-1">
                                     <h3 className={`font-semibold text-sm ${selectedJobId === session.jobId ? "text-gray-900" : "text-gray-700"}`}>
-                                        {session.clientName || "Unknown Client"}
+                                        {session.clientName || "Client"}
                                     </h3>
-                                    <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded capitalize">
-                                        {session.status.replace("_", " ")}
+                                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded capitalize font-medium">
+                                        {session.status.replace(/_/g, " ")}
                                     </span>
                                 </div>
                                 <p className="text-xs text-gray-500 line-clamp-1 mb-2">
-                                    {session.description}
+                                    {session.lastMessage || session.description}
                                 </p>
                                 <div className="flex items-center justify-between text-[10px] text-gray-400">
-                                    <span>#{session.jobId.slice(0, 5)}</span>
+                                    <span className="font-mono font-bold text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded">
+                                        #{formatRequestCode({ id: session.jobId, ...session })}
+                                    </span>
                                     <ChevronRight className={`w-3 h-3 transition-transform ${selectedJobId === session.jobId ? "text-orange-500 translate-x-1" : "opacity-0 group-hover:opacity-100"}`} />
                                 </div>
                             </div>
@@ -203,8 +263,8 @@ export default function ProviderMessagesPage() {
                                 </button>
                                 <div>
                                     <h2 className="font-bold text-gray-900">{activeSession.clientName}</h2>
-                                    <p className="text-xs text-green-600 flex items-center gap-1">
-                                        Active Job #{activeSession.jobId.slice(0, 6)}
+                                    <p className="text-xs text-green-600 flex items-center gap-1 font-medium">
+                                        {activeSession.serviceType || "Service Request"} • #{formatRequestCode({ id: activeSession.jobId, ...activeSession })}
                                     </p>
                                 </div>
                             </div>
@@ -215,7 +275,9 @@ export default function ProviderMessagesPage() {
                             requestId={selectedJobId}
                             currentUserId={currentUserId!}
                             currentUserRole="provider"
-                            currentUserName="You" // In a real app, fetch Provider Name
+                            currentUserName={providerName}
+                            clientName={activeSession.clientName}
+                            providerName={providerName}
                             className="flex-1 border-none rounded-none"
                         />
                     </>

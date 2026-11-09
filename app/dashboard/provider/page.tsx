@@ -10,16 +10,18 @@ import {
     doc,
     updateDoc,
     getDoc,
-    addDoc
+    addDoc,
 } from "firebase/firestore";
 import { db, auth } from "../../../lib/firebase";
 import { sendNotification, sendAdminAlert } from "../../../lib/notifications";
 
-import { Bell, AlertTriangle } from "lucide-react";
+import { Bell, AlertTriangle, Crown, MapPin } from "lucide-react";
 import StatsCards from "@/components/dashboard/provider/StatsCards";
 import JobCard from "@/components/dashboard/provider/JobCard";
 import StartJobModal from "@/components/dashboard/provider/StartJobModal";
 import CompleteJobModal from "@/components/dashboard/provider/CompleteJobModal";
+import AssignAssistantModal from "@/components/dashboard/provider/AssignAssistantModal";
+import { useHodDirectory } from "@/lib/hod-routing";
 
 // --- TYPES ---
 interface JobRequest {
@@ -28,7 +30,15 @@ interface JobRequest {
     clientName?: string;
     description: string;
     serviceType: string;
-    status: 'pending' | 'accepted' | 'in_progress' | 'fully_completed' | 'partially_completed' | 'cancelled' | 'rejected' | 'awaiting_confirmation';
+    status:
+        | "pending"
+        | "accepted"
+        | "in_progress"
+        | "fully_completed"
+        | "partially_completed"
+        | "cancelled"
+        | "rejected"
+        | "awaiting_confirmation";
     location: string;
     createdAt: any;
     budget?: number;
@@ -36,34 +46,45 @@ interface JobRequest {
     startNote?: string;
     providerId?: string;
     invitedProviderIds?: string[];
+    hodId?: string;
+    hodName?: string;
+    clientState?: string;
+    assignedAssistant?: any;
 }
 
 export default function ProviderDashboard() {
     const router = useRouter();
+    const { activeAssignments: hodAssignments, assistants: directoryAssistants } = useHodDirectory();
+
     const [providerId, setProviderId] = useState<string | null>(null);
     const [providerName, setProviderName] = useState("Partner");
     const [providerProfile, setProviderProfile] = useState<any>(null);
     const [jobs, setJobs] = useState<JobRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isRejected, setIsRejected] = useState(false);
-    const [rejectionReason, setRejectionReason] = useState("");
+    const [isRejected] = useState(false);
+    const [rejectionReason] = useState("");
 
-    const [activeTab, setActiveTab] = useState<'new' | 'active' | 'completed'>('new');
+    const [activeTab, setActiveTab] = useState<"new" | "active" | "completed">("new");
 
     // Modal States
     const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
     const [isStartModalOpen, setIsStartModalOpen] = useState(false);
     const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+    const [isAssignAssistantOpen, setIsAssignAssistantOpen] = useState(false);
+
+    // Departments where this provider is the appointed State HOD
+    const myHodDepartments = hodAssignments.filter((h) => h.hodUid === providerId);
 
     // --- INITIALIZATION ---
     useEffect(() => {
         let unsubUser: (() => void) | null = null;
         const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
-            const storedId = currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem("tempUserId") : null);
+            const storedId =
+                currentUser?.uid ||
+                (typeof window !== "undefined" ? localStorage.getItem("tempUserId") : null);
 
             if (unsubUser) unsubUser();
 
-            // Security Check: Ensure only providers access this
             if (!storedId) {
                 router.push("/signin");
                 return;
@@ -71,25 +92,32 @@ export default function ProviderDashboard() {
 
             setProviderId(storedId);
 
-            // Real-time Provider Profile & Status Listener
-            unsubUser = onSnapshot(doc(db, "users", storedId), (userDoc) => {
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    if (data.status !== 'approved') {
-                        if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
-                            router.replace("/dashboard/pending");
-                            return;
-                        } else {
-                            router.replace("/register/provider");
-                            return;
+            unsubUser = onSnapshot(
+                doc(db, "users", storedId),
+                (userDoc) => {
+                    if (userDoc.exists()) {
+                        const data = userDoc.data();
+                        if (data.status !== "approved") {
+                            if (
+                                data.status === "pending_review" ||
+                                data.status === "pending" ||
+                                data.status === "rejected"
+                            ) {
+                                router.replace("/dashboard/pending");
+                                return;
+                            } else {
+                                router.replace("/register/provider");
+                                return;
+                            }
                         }
+                        setProviderProfile(data);
+                        setProviderName(data.fullName || data.businessName || "Partner");
                     }
-                    setProviderProfile(data);
-                    setProviderName(data.fullName || "Partner");
+                },
+                (e) => {
+                    console.error("Profile fetch error", e);
                 }
-            }, (e) => {
-                console.error("Profile fetch error", e);
-            });
+            );
         });
 
         return () => {
@@ -102,13 +130,10 @@ export default function ProviderDashboard() {
     useEffect(() => {
         if (!providerId) return;
 
-        // Query 1: Direct Assignments
-        const q1 = query(
-            collection(db, "job_requests"),
-            where("providerId", "==", providerId)
-        );
+        // Query 1: Direct Assignments (including HOD routed requests where providerId == hodUid)
+        const q1 = query(collection(db, "job_requests"), where("providerId", "==", providerId));
 
-        // Query 2: Invitations
+        // Query 2: Invitations & Assistant Dispatches
         const q2 = query(
             collection(db, "job_requests"),
             where("invitedProviderIds", "array-contains", providerId)
@@ -116,27 +141,74 @@ export default function ProviderDashboard() {
 
         let directJobs: JobRequest[] = [];
         let invitedJobs: JobRequest[] = [];
+        const clientNameCache: Record<string, string> = {};
+
+        const normalizeJob = (id: string, data: any): JobRequest => {
+            const cId = String(data.clientId || data.userId || "");
+            const rawName = String(data.clientName || data.userName || data.customerName || "").trim();
+            const resolvedName =
+                rawName && rawName !== "Client" && rawName !== "Unknown Client"
+                    ? rawName
+                    : clientNameCache[cId] || "";
+            return {
+                id,
+                ...data,
+                clientId: cId,
+                clientName: resolvedName || rawName || undefined,
+                budget: Number(data.budget ?? data.price ?? 0),
+            } as JobRequest;
+        };
 
         const updateJobs = () => {
-            // Merge by ID to prevent duplicates (though unlikely to overlap in valid state)
             const allJobs = [...directJobs, ...invitedJobs];
-            const nonArchivedJobs = allJobs.filter(j => !((j as any).isArchived) && (j.status as string) !== 'archived');
-            const uniqueJobs = Array.from(new Map(nonArchivedJobs.map(item => [item.id, item])).values());
+            const nonArchivedJobs = allJobs.filter(
+                (j) => !(j as any).isArchived && (j.status as string) !== "archived"
+            );
+            const uniqueJobs = Array.from(
+                new Map(nonArchivedJobs.map((item) => [item.id, item])).values()
+            );
 
-            // Sort by Date Descending safely
             uniqueJobs.sort((a, b) => {
-                const timeA = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
-                const timeB = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                const timeA = b.createdAt?.seconds
+                    ? b.createdAt.seconds * 1000
+                    : new Date(b.createdAt || 0).getTime();
+                const timeB = a.createdAt?.seconds
+                    ? a.createdAt.seconds * 1000
+                    : new Date(a.createdAt || 0).getTime();
                 return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
             });
 
             setJobs(uniqueJobs);
             setIsLoading(false);
+
+            uniqueJobs.forEach(async (j) => {
+                const cId = j.clientId || (j as any).userId;
+                if (!cId || clientNameCache[cId]) return;
+                if (j.clientName && j.clientName !== "Client" && j.clientName !== "Unknown Client") return;
+                try {
+                    const uSnap = await getDoc(doc(db, "users", cId));
+                    if (uSnap.exists()) {
+                        const u = uSnap.data();
+                        const name = String(u.fullName || u.displayName || u.name || u.email || "").trim();
+                        if (name) {
+                            clientNameCache[cId] = name;
+                            setJobs((curr) =>
+                                curr.map((item) =>
+                                    (item.clientId || (item as any).userId) === cId
+                                        ? { ...item, clientName: name }
+                                        : item
+                                )
+                            );
+                        }
+                    }
+                } catch (_) {}
+            });
         };
 
-        const unsubscribe1 = onSnapshot(q1,
+        const unsubscribe1 = onSnapshot(
+            q1,
             (snapshot) => {
-                directJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+                directJobs = snapshot.docs.map((d) => normalizeJob(d.id, d.data()));
                 updateJobs();
             },
             (error) => {
@@ -145,9 +217,10 @@ export default function ProviderDashboard() {
             }
         );
 
-        const unsubscribe2 = onSnapshot(q2,
+        const unsubscribe2 = onSnapshot(
+            q2,
             (snapshot) => {
-                invitedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+                invitedJobs = snapshot.docs.map((d) => normalizeJob(d.id, d.data()));
                 updateJobs();
             },
             (error) => {
@@ -162,42 +235,51 @@ export default function ProviderDashboard() {
         };
     }, [providerId]);
 
-
     // --- CALCULATED STATS ---
-    const completedList = jobs.filter(j => ['fully_completed', 'completed'].includes(j.status));
+    const completedList = jobs.filter((j) => ["fully_completed", "completed"].includes(j.status));
     const stats = {
-        active: jobs.filter(j => ['accepted', 'in_progress', 'partially_completed', 'awaiting_confirmation'].includes(j.status)).length,
-        pending: jobs.filter(j => ['pending', 'open'].includes(j.status)).length,
+        active: jobs.filter((j) =>
+            ["accepted", "in_progress", "partially_completed", "awaiting_confirmation"].includes(
+                j.status
+            )
+        ).length,
+        pending: jobs.filter((j) => ["pending", "open"].includes(j.status)).length,
         completed: completedList.length,
         rating: providerProfile?.rating ?? 4.9,
-        ratingCount: providerProfile?.reviewCount ?? completedList.length
+        ratingCount: providerProfile?.reviewCount ?? completedList.length,
     };
 
     // --- FILTERS ---
-    const filteredJobs = jobs.filter(job => {
-        if (activeTab === 'new') return ['pending', 'open'].includes(job.status);
-        if (activeTab === 'active') return ['accepted', 'in_progress', 'partially_completed', 'awaiting_confirmation'].includes(job.status);
-        if (activeTab === 'completed') return ['fully_completed', 'completed', 'cancelled', 'rejected'].includes(job.status);
+    const filteredJobs = jobs.filter((job) => {
+        if (activeTab === "new") return ["pending", "open"].includes(job.status);
+        if (activeTab === "active")
+            return [
+                "accepted",
+                "in_progress",
+                "partially_completed",
+                "awaiting_confirmation",
+            ].includes(job.status);
+        if (activeTab === "completed")
+            return ["fully_completed", "completed", "cancelled", "rejected"].includes(job.status);
         return true;
     });
 
     // --- ACTION HANDLERS ---
-
     const handleAccept = async (jobId: string) => {
         try {
             if (!providerId) return;
             const userDoc = await getDoc(doc(db, "users", providerId));
-            if (!userDoc.exists() || userDoc.data().status !== 'approved') {
+            if (!userDoc.exists() || userDoc.data().status !== "approved") {
                 alert("Your account must be approved by an administrator before accepting jobs.");
                 return;
             }
 
-            const job = jobs.find(j => j.id === jobId);
+            const job = jobs.find((j) => j.id === jobId);
             const nowIso = new Date().toISOString();
             const updates = {
-                status: 'accepted',
+                status: "accepted",
                 providerId: providerId,
-                acceptedAt: nowIso
+                acceptedAt: nowIso,
             };
 
             await updateDoc(doc(db, "job_requests", jobId), updates);
@@ -207,7 +289,12 @@ export default function ProviderDashboard() {
 
             const targetClient = job?.clientId || (job as any)?.userId;
             if (targetClient && job) {
-                await sendNotification(targetClient, "Job Accepted! 🎉", `Your request for ${job.serviceType} has been accepted.`, 'success');
+                await sendNotification(
+                    targetClient,
+                    "Job Accepted! 🎉",
+                    `Your request for ${job.serviceType} has been accepted by ${providerName}.`,
+                    "success"
+                );
             }
         } catch (error) {
             console.error(error);
@@ -216,21 +303,26 @@ export default function ProviderDashboard() {
     };
 
     const handleReject = async (jobId: string) => {
-        if (!confirm("Are you sure you want to reject this job?")) return;
+        if (!confirm("Are you sure you want to decline this job?")) return;
         try {
-            const job = jobs.find(j => j.id === jobId);
-            await updateDoc(doc(db, "job_requests", jobId), { status: 'rejected' });
+            const job = jobs.find((j) => j.id === jobId);
+            await updateDoc(doc(db, "job_requests", jobId), { status: "rejected" });
             try {
-                await updateDoc(doc(db, "requests", jobId), { status: 'rejected' });
+                await updateDoc(doc(db, "requests", jobId), { status: "rejected" });
             } catch (_) {}
 
             const targetClient = job?.clientId || (job as any)?.userId;
             if (targetClient && job) {
-                await sendNotification(targetClient, "Job Declined", `Provider unavailable for ${job.serviceType}.`, 'error');
+                await sendNotification(
+                    targetClient,
+                    "Job Declined",
+                    `Provider unavailable for ${job.serviceType}.`,
+                    "error"
+                );
             }
         } catch (error) {
             console.error(error);
-            alert("Failed to reject job.");
+            alert("Failed to decline job.");
         }
     };
 
@@ -238,11 +330,11 @@ export default function ProviderDashboard() {
         if (!selectedJob) return;
         try {
             const startUpdates = {
-                status: 'in_progress',
+                status: "in_progress",
                 startTime: new Date().toISOString(),
                 estimatedDuration: eta,
                 startNote: note,
-                note: note
+                note: note,
             };
             await updateDoc(doc(db, "job_requests", selectedJob.id), startUpdates);
             try {
@@ -253,8 +345,8 @@ export default function ProviderDashboard() {
                 await sendNotification(
                     selectedJob.clientId,
                     "Job Started 🚀",
-                    `Provider has started. ETA: ${eta}. ${note ? `Note: ${note}` : ''}`,
-                    'info'
+                    `Technician has started work. ETA: ${eta}. ${note ? `Note: ${note}` : ""}`,
+                    "info"
                 );
             }
             setIsStartModalOpen(false);
@@ -264,21 +356,21 @@ export default function ProviderDashboard() {
         }
     };
 
-    const handleCompleteJob = async (type: 'full' | 'partial', data?: any) => {
+    const handleCompleteJob = async (type: "full" | "partial", data?: any) => {
         if (!selectedJob) return;
         try {
             const nowIso = new Date().toISOString();
             const updates: any = {
-                status: type === 'full' ? 'fully_completed' : 'partially_completed',
+                status: type === "full" ? "fully_completed" : "partially_completed",
                 actualEndTime: nowIso,
-                completedAt: nowIso
+                completedAt: nowIso,
             };
 
-            if (type === 'partial' && data) {
+            if (type === "partial" && data) {
                 updates.completionDetails = {
                     reason: data.reason,
                     photoProof: data.photoProof,
-                    timestamp: nowIso
+                    timestamp: nowIso,
                 };
             }
 
@@ -287,33 +379,43 @@ export default function ProviderDashboard() {
                 await updateDoc(doc(db, "requests", selectedJob.id), updates);
             } catch (_) {}
 
-            // Notifications
             if (selectedJob.clientId) {
-                const title = type === 'full' ? "Job Done - Waiting Confirmation ⏳" : "Job Update: Partial ⚠️";
-                const msg = type === 'full'
-                    ? `Provider marked job as done. Please confirm in dashboard.`
-                    : `Job marked as partial: ${data.reason}`;
+                const title =
+                    type === "full"
+                        ? "Job Done - Waiting Confirmation ⏳"
+                        : "Job Update: Partial ⚠️";
+                const msg =
+                    type === "full"
+                        ? `Technician marked job as done. Please confirm in dashboard.`
+                        : `Job marked as partial: ${data.reason}`;
 
-                await sendNotification(selectedJob.clientId, title, msg, type === 'full' ? 'success' : 'warning');
+                await sendNotification(
+                    selectedJob.clientId,
+                    title,
+                    msg,
+                    type === "full" ? "success" : "warning"
+                );
             }
 
-            // Admin Alert for Partial
-            if (type === 'partial') {
-                await sendAdminAlert("Partial Completion Alert", `Job ${selectedJob.id} marked partial. Reason: ${data?.reason}`, 'warning');
+            if (type === "partial") {
+                await sendAdminAlert(
+                    "Partial Completion Alert",
+                    `Job ${selectedJob.id} marked partial. Reason: ${data?.reason}`,
+                    "warning"
+                );
             }
 
-            // Chat Message (System/Auto-post)
-            // We want this to appear in the chat so the user sees it immediately
-            const chatMsg = type === 'full'
-                ? "I have finished the job! Please verify and confirm completion."
-                : `Status Update: Job is partially completed. Reason: ${data?.reason}`;
+            const chatMsg =
+                type === "full"
+                    ? "I have finished the job! Please verify and confirm completion."
+                    : `Status Update: Job is partially completed. Reason: ${data?.reason}`;
 
             await addDoc(collection(db, "job_requests", selectedJob.id, "messages"), {
                 text: chatMsg,
-                senderId: selectedJob.providerId, // Send as provider
+                senderId: selectedJob.providerId,
                 senderName: "System (Provider)",
-                createdAt: new Date(), // using Date for now to match other parts, or import serverTimestamp if already imported
-                role: 'provider'
+                createdAt: new Date(),
+                role: "provider",
             });
 
             setIsCompleteModalOpen(false);
@@ -323,13 +425,8 @@ export default function ProviderDashboard() {
         }
     };
 
-
-    // --- RENDER ---
     return (
         <div className="w-full min-h-screen bg-gray-50/50">
-            {/* Header */}
-
-
             {isRejected && (
                 <div className="bg-red-50 border-b border-red-200 p-4 animate-in slide-in-from-top-5">
                     <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -343,7 +440,7 @@ export default function ProviderDashboard() {
                             </div>
                         </div>
                         <button
-                            onClick={() => router.push('/register/provider')}
+                            onClick={() => router.push("/register/provider")}
                             className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-sm transition-colors whitespace-nowrap"
                         >
                             Fix Application & Re-submit
@@ -353,38 +450,85 @@ export default function ProviderDashboard() {
             )}
 
             <div className="p-8 max-w-7xl mx-auto space-y-8">
+                {/* HOD Department Banner (if appointed as HOD for any Category + State) */}
+                {myHodDepartments.length > 0 && (
+                    <div className="p-5 rounded-3xl bg-gradient-to-r from-purple-900 to-indigo-900 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-white/15 text-purple-100 text-xs font-bold uppercase tracking-wider">
+                                <Crown className="w-3.5 h-3.5 text-amber-300" />
+                                Appointed Head of Department (HOD)
+                            </div>
+                            <h2 className="text-lg font-bold">
+                                You oversee client service requests for your designated department(s)
+                            </h2>
+                            <p className="text-xs text-purple-200">
+                                Incoming requests in your state &amp; category route exclusively to you. Review each request and click{" "}
+                                <strong>&ldquo;Dispatch Nearest Assistant&rdquo;</strong> to send the closest field technician.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                            {myHodDepartments.map((dept) => (
+                                <span
+                                    key={dept.key}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 text-xs font-bold"
+                                >
+                                    <MapPin className="w-3.5 h-3.5 text-emerald-300" />
+                                    {dept.categoryName} • {dept.stateName}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 1. Stats Overview */}
                 <section>
                     <StatsCards stats={stats} />
                 </section>
 
-                {/* 2. My Jobs Section */}
+                {/* 2. My Jobs / Department Dispatch Section */}
                 <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden min-h-[600px]">
                     <div className="p-8 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-2xl font-bold text-gray-900">My Jobs</h2>
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">
+                                {myHodDepartments.length > 0
+                                    ? "Department Requests & Active Jobs"
+                                    : "My Assigned Jobs"}
+                            </h2>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {myHodDepartments.length > 0
+                                    ? "Requests routed to you as State HOD or assigned to your field team."
+                                    : "Jobs dispatched to you by your State Head of Department (HOD)."}
+                            </p>
+                        </div>
 
                         {/* Tabs */}
                         <div className="flex bg-gray-100/80 p-1.5 rounded-xl self-start md:self-auto">
                             {[
-                                { id: 'new', label: 'New Requests', count: stats.pending },
-                                { id: 'active', label: 'In Progress', count: stats.active },
-                                { id: 'completed', label: 'History', count: stats.completed }
-                            ].map(tab => (
+                                { id: "new", label: "New Requests", count: stats.pending },
+                                { id: "active", label: "In Progress", count: stats.active },
+                                { id: "completed", label: "History", count: stats.completed },
+                            ].map((tab) => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id as any)}
                                     className={`
-                                        px-6 py-2.5 rounded-lg text-sm font-bold transition-all
-                                        ${activeTab === tab.id
-                                            ? 'bg-white text-gray-900 shadow-sm'
-                                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                                        px-6 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer
+                                        ${
+                                            activeTab === tab.id
+                                                ? "bg-white text-gray-900 shadow-sm"
+                                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
                                         }
                                     `}
                                 >
                                     {tab.label}
                                     {tab.count > 0 && (
-                                        <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${activeTab === tab.id ? 'bg-black text-white' : 'bg-gray-300 text-gray-600'}`}>
+                                        <span
+                                            className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+                                                activeTab === tab.id
+                                                    ? "bg-black text-white"
+                                                    : "bg-gray-300 text-gray-600"
+                                            }`}
+                                        >
                                             {tab.count}
                                         </span>
                                     )}
@@ -397,30 +541,44 @@ export default function ProviderDashboard() {
                     <div className="p-8 bg-gray-50/30 h-full">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-20">
-                                <span className="animate-pulse font-bold text-gray-400">Loading your workspace...</span>
+                                <span className="animate-pulse font-bold text-gray-400">
+                                    Loading your workspace...
+                                </span>
                             </div>
                         ) : filteredJobs.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-center">
                                 <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6 text-gray-300">
                                     <Bell className="w-10 h-10" />
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">No jobs found here</h3>
+                                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                                    No jobs found here
+                                </h3>
                                 <p className="text-gray-500 max-w-sm">
-                                    {activeTab === 'new'
-                                        ? "You're all caught up! Wait for new incoming requests."
-                                        : "Jobs will appear here once you change their status."}
+                                    {activeTab === "new"
+                                        ? "You're all caught up! New requests routed to your department will appear here automatically."
+                                        : "Jobs will appear here once you dispatch an assistant or update their status."}
                                 </p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {filteredJobs.map(job => (
+                                {filteredJobs.map((job) => (
                                     <JobCard
                                         key={job.id}
                                         job={job}
                                         onAccept={handleAccept}
                                         onReject={handleReject}
-                                        onStart={(j) => { setSelectedJob(j); setIsStartModalOpen(true); }}
-                                        onComplete={(j) => { setSelectedJob(j); setIsCompleteModalOpen(true); }}
+                                        onStart={(j) => {
+                                            setSelectedJob(j);
+                                            setIsStartModalOpen(true);
+                                        }}
+                                        onComplete={(j) => {
+                                            setSelectedJob(j);
+                                            setIsCompleteModalOpen(true);
+                                        }}
+                                        onAssignAssistant={(j) => {
+                                            setSelectedJob(j);
+                                            setIsAssignAssistantOpen(true);
+                                        }}
                                     />
                                 ))}
                             </div>
@@ -444,6 +602,15 @@ export default function ProviderDashboard() {
                 onComplete={handleCompleteJob}
             />
 
+            <AssignAssistantModal
+                isOpen={isAssignAssistantOpen}
+                job={selectedJob}
+                hodUid={providerId || ""}
+                hodName={providerName}
+                hodProfile={providerProfile}
+                directoryAssistants={directoryAssistants}
+                onClose={() => setIsAssignAssistantOpen(false)}
+            />
         </div>
     );
 }

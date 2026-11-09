@@ -60,8 +60,7 @@ flutter devices
 flutter pub get
 
 # 4. Start the application on your running emulator or phone
-flutter run
-
+ 
 # To target a specific emulator explicitly (e.g. emulator-5554):
 flutter run -d emulator-5554
 ```

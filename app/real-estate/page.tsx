@@ -8,104 +8,41 @@ import Button from "@/components/ui/Button";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, limit } from "firebase/firestore";
 
-const NIGERIAN_REAL_ESTATE_FALLBACKS = [
-    {
-        id: "prop_banana_island_01",
-        title: "Luxury 5-Bedroom Detached Mansion with Infinity Pool",
-        price: "₦450,000,000",
-        location: "Banana Island, Ikoyi, Lagos",
-        beds: 5,
-        baths: 6,
-        sqft: 4500,
-        image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
-        type: "For Sale"
-    },
-    {
-        id: "prop_lekki_02",
-        title: "Contemporary 4-Bedroom Terrace Duplex with BQ",
-        price: "₦135,000,000",
-        location: "Admiralty Way, Lekki Phase 1, Lagos",
-        beds: 4,
-        baths: 4,
-        sqft: 2800,
-        image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
-        type: "For Sale"
-    },
-    {
-        id: "prop_maitama_03",
-        title: "Diplomatic 6-Bedroom Villa on 1,200sqm Grounds",
-        price: "₦380,000,000",
-        location: "Gana Street, Maitama, Abuja",
-        beds: 6,
-        baths: 7,
-        sqft: 5200,
-        image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
-        type: "For Sale"
-    },
-    {
-        id: "prop_vi_04",
-        title: "Waterfront 3-Bedroom Penthouse with Panoramic Views",
-        price: "₦14,000,000/yr",
-        location: "Ozumba Mbadiwe Avenue, Victoria Island, Lagos",
-        beds: 3,
-        baths: 3,
-        sqft: 2100,
-        image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
-        type: "For Rent"
-    },
-    {
-        id: "prop_ikeja_05",
-        title: "Serviced 3-Bedroom Apartment in Gated Enclave",
-        price: "₦6,500,000/yr",
-        location: "Isaac John Street, Ikeja GRA, Lagos",
-        beds: 3,
-        baths: 3,
-        sqft: 1800,
-        image: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
-        type: "For Rent"
-    },
-    {
-        id: "prop_wuse_06",
-        title: "Executive 4-Bedroom Semi-Detached Duplex",
-        price: "₦7,500,000/yr",
-        location: "Aminu Kano Crescent, Wuse 2, Abuja",
-        beds: 4,
-        baths: 4,
-        sqft: 2600,
-        image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80",
-        type: "For Rent"
-    }
-];
-
 export default function RealEstatePage() {
-    const [properties, setProperties] = useState<any[]>(NIGERIAN_REAL_ESTATE_FALLBACKS);
+    const [properties, setProperties] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchLocation, setSearchLocation] = useState("");
     const [filterType, setFilterType] = useState("All");
 
     useEffect(() => {
         async function loadProperties() {
             try {
-                const q = query(collection(db, "properties"), limit(12));
+                const q = query(collection(db, "properties"), limit(50));
                 const snap = await getDocs(q);
                 if (!snap.empty) {
                     const loaded = snap.docs.map(doc => {
                         const d = doc.data();
                         return {
                             id: doc.id,
-                            title: d.title || "Prime Real Estate",
+                            title: d.title || "Real Estate Listing",
                             price: d.price || (typeof d.rawPrice === 'number' ? `₦${d.rawPrice.toLocaleString()}` : "Contact for Price"),
-                            location: d.location || d.address || "Lagos, Nigeria",
-                            beds: d.beds ?? 3,
-                            baths: d.baths ?? 3,
-                            sqft: d.sqft ?? 2000,
+                            location: d.location || d.address || "Nigeria",
+                            beds: d.beds ?? 0,
+                            baths: d.baths ?? 0,
+                            sqft: d.sqft ?? 0,
                             image: d.image || (d.images && d.images[0]) || "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
                             type: d.status || d.type || "For Sale",
                         };
                     });
                     setProperties(loaded);
+                } else {
+                    setProperties([]);
                 }
             } catch (err) {
                 console.warn("Notice loading properties from Firestore:", err);
+                setProperties([]);
+            } finally {
+                setIsLoading(false);
             }
         }
         loadProperties();
@@ -190,47 +127,69 @@ export default function RealEstatePage() {
                         </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {filtered.map((prop) => (
-                            <Link href={`/property/details?id=${prop.id}`} key={prop.id} className="block group">
-                                <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col h-full">
-                                    <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-                                        <img
-                                            src={prop.image}
-                                            alt={prop.title}
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                        />
-                                        <div className="absolute top-4 left-4">
-                                            <span className="bg-gray-900/80 backdrop-blur-sm px-3 py-1 rounded-full text-[11px] font-bold text-white uppercase tracking-wider">
-                                                {prop.type}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="p-6 flex flex-col flex-1 justify-between">
-                                        <div>
-                                            <h3 className="text-2xl font-black text-gray-900">{prop.price}</h3>
-                                            <h4 className="font-bold text-gray-800 mt-1 group-hover:text-orange-600 transition-colors line-clamp-1">{prop.title}</h4>
-                                            <div className="flex items-center gap-1.5 text-gray-500 text-xs mt-2">
-                                                <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                                <span className="truncate">{prop.location}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between pt-5 mt-6 border-t border-gray-100 text-gray-600 text-xs font-medium">
-                                            <div className="flex items-center gap-1">
-                                                <Bed className="w-4 h-4 text-gray-400" /> {prop.beds} Beds
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <Bath className="w-4 h-4 text-gray-400" /> {prop.baths} Baths
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <Move className="w-4 h-4 text-gray-400" /> {prop.sqft} sqft
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    {isLoading ? (
+                        <div className="py-20 text-center">
+                            <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                            <p className="text-gray-500 text-sm font-medium">Loading properties from live database...</p>
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm max-w-xl mx-auto my-8">
+                            <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <ShieldCheck className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">No Properties Listed Yet</h3>
+                            <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                                Authentic real estate listings published by registered agents and verified property owners will appear here in real time.
+                            </p>
+                            <Link href="/signin">
+                                <Button className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-6 py-2.5 rounded-xl">
+                                    Sign In to List a Property
+                                </Button>
                             </Link>
-                        ))}
-                    </div>
+                        </div>
+                    ) : (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {filtered.map((prop) => (
+                                <Link href={`/property/details?id=${prop.id}`} key={prop.id} className="block group">
+                                    <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col h-full">
+                                        <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+                                            <img
+                                                src={prop.image}
+                                                alt={prop.title}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                            />
+                                            <div className="absolute top-4 left-4">
+                                                <span className="bg-gray-900/80 backdrop-blur-sm px-3 py-1 rounded-full text-[11px] font-bold text-white uppercase tracking-wider">
+                                                    {prop.type}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="p-6 flex flex-col flex-1 justify-between">
+                                            <div>
+                                                <h3 className="text-2xl font-black text-gray-900">{prop.price}</h3>
+                                                <h4 className="font-bold text-gray-800 mt-1 group-hover:text-orange-600 transition-colors line-clamp-1">{prop.title}</h4>
+                                                <div className="flex items-center gap-1.5 text-gray-500 text-xs mt-2">
+                                                    <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                                    <span className="truncate">{prop.location}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between pt-5 mt-6 border-t border-gray-100 text-gray-600 text-xs font-medium">
+                                                <div className="flex items-center gap-1">
+                                                    <Bed className="w-4 h-4 text-gray-400" /> {prop.beds} Beds
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <Bath className="w-4 h-4 text-gray-400" /> {prop.baths} Baths
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <Move className="w-4 h-4 text-gray-400" /> {prop.sqft} sqft
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
                 </Container>
             </section>
         </main>

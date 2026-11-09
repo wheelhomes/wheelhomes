@@ -19,15 +19,21 @@ class _ProviderMessagesTabState extends State<ProviderMessagesTab> {
   @override
   Widget build(BuildContext context) {
     final requestProvider = Provider.of<RequestProvider>(context);
-    final myJobs = requestProvider.providerJobs;
+    final unlockedJobs = requestProvider.providerJobs
+        .where((j) => !['pending', 'open', 'rejected', 'cancelled'].contains(j.status))
+        .toList();
 
-    final filteredJobs = myJobs.where((j) {
+    final filteredJobs = unlockedJobs.where((j) {
       if (_searchQuery.trim().isEmpty) return true;
-      final query = _searchQuery.toLowerCase();
+      final query = _searchQuery.replaceAll('#', '').toLowerCase();
       final title = j.serviceType.toLowerCase();
       final desc = j.description.toLowerCase();
       final address = (j.location['address'] ?? '').toString().toLowerCase();
-      return title.contains(query) || desc.contains(query) || address.contains(query);
+      final code = j.displayRequestCode.toLowerCase();
+      return title.contains(query) ||
+          desc.contains(query) ||
+          address.contains(query) ||
+          code.contains(query);
     }).toList();
 
     return SafeArea(
@@ -63,7 +69,7 @@ class _ProviderMessagesTabState extends State<ProviderMessagesTab> {
                       const Icon(LucideIcons.messageSquare, size: 14, color: AppTheme.primary),
                       const SizedBox(width: 4),
                       Text(
-                        '${myJobs.length} Channels',
+                        '${unlockedJobs.length} Channels',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primary),
                       ),
                     ],
@@ -166,7 +172,7 @@ class _ProviderMessagesTabState extends State<ProviderMessagesTab> {
               builder: (_) => ChatScreen(
                 jobId: job.id,
                 title: job.serviceType,
-                subtitle: job.location['address'] ?? 'Job Dispatch',
+                subtitle: '#${job.displayRequestCode} • ${job.location['address'] ?? 'Job Dispatch'}',
               ),
             ),
           );
@@ -236,11 +242,35 @@ class _ProviderMessagesTabState extends State<ProviderMessagesTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text(
-              job.description,
-              style: const TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: const Color(0xFFFED7AA)),
+                  ),
+                  child: Text(
+                    '#${job.displayRequestCode}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF9A3412),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    job.description,
+                    style: const TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Row(

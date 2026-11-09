@@ -6,15 +6,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, onSnapshot, limit, doc, updateDoc, getDoc } from "firebase/firestore";
 import {
     Briefcase,
-    Droplet,
-    Wrench,
     Zap,
     Clock,
     CheckCircle,
     XCircle,
     AlertTriangle,
-    Sparkles, // Cleaning
-    Thermometer // HVAC
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -23,6 +19,8 @@ import ChatSheet from "../../../components/chat/ChatSheet";
 import { JobCard } from "../../../components/dashboard/JobCard";
 import { RequestWizard } from "../../../components/request/RequestWizard";
 import MagicRequestInput from "../../../components/dashboard/MagicRequestInput";
+import VerifiedProvidersDirectory from "@/components/services/VerifiedProvidersDirectory";
+import { useServiceCategories, getLucideIcon } from "@/lib/service-categories";
 
 interface JobRequest {
     id: string;
@@ -30,18 +28,16 @@ interface JobRequest {
     providerId: string;
     providerName?: string;
     serviceType: string;
-    status: 'pending' | 'accepted' | 'in_progress' | 'fully_completed' | 'partially_completed' | 'cancelled' | 'rejected';
+    status: "pending" | "accepted" | "in_progress" | "fully_completed" | "partially_completed" | "cancelled" | "rejected";
     description: string;
     budget: number;
     location: string;
     createdAt: any;
 }
 
-
-
 export default function UserDashboard() {
     const router = useRouter();
-    // const [activeTab, setActiveTab] = useState("home"); // Removed activeTab
+    const { activeCategories } = useServiceCategories();
     const [jobs, setJobs] = useState<JobRequest[]>([]);
     const [userId, setUserId] = useState<string | null>(null);
     const [userName, setUserName] = useState<string>("User");
@@ -57,10 +53,9 @@ export default function UserDashboard() {
     };
 
     // Wizard State
-    // Wizard State
     const [isWizardOpen, setIsWizardOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState("");
-    const [magicDescription, setMagicDescription] = useState(""); // For AI pre-fill
+    const [magicDescription, setMagicDescription] = useState("");
 
     const handleOpenWizard = (category: string) => {
         setSelectedCategory(category);
@@ -77,13 +72,12 @@ export default function UserDashboard() {
             const idToken = await auth.currentUser?.getIdToken();
             const res = await fetch("/api/ai/magic-request", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
                 body: JSON.stringify({ prompt: text }),
             });
             const data = await res.json();
 
             if (data.success) {
-                // Pre-fill and open wizard
                 setSelectedCategory(data.data.category.toLowerCase());
                 setMagicDescription(data.data.description);
                 setIsWizardOpen(true);
@@ -108,7 +102,6 @@ export default function UserDashboard() {
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setUserId(user.uid);
-                // Fetch User Profile Name
                 try {
                     const userDoc = await getDoc(doc(db, "users", user.uid));
                     if (userDoc.exists()) {
@@ -118,28 +111,41 @@ export default function UserDashboard() {
                 } catch (e) {
                     console.error("Error fetching user profile:", e);
                 }
+
+                // Check URL params for direct booking requests
+                if (typeof window !== "undefined") {
+                    const params = new URLSearchParams(window.location.search);
+                    const cat = params.get("category");
+                    const provName = params.get("providerName");
+                    if (cat) {
+                        setSelectedCategory(cat.toLowerCase());
+                        if (provName) {
+                            setMagicDescription(`Direct request for verified specialist: ${provName}`);
+                        }
+                        setIsWizardOpen(true);
+                    }
+                }
             } else {
-                // Not authenticated
                 router.push("/signin");
             }
         });
         return () => unsubscribeAuth();
-    }, []);
+    }, [router]);
 
     // Fetch My Jobs
     useEffect(() => {
         if (!userId) return;
 
-        const q = query(
-            collection(db, "job_requests"),
-            where("clientId", "==", userId)
-        );
+        const q = query(collection(db, "job_requests"), where("clientId", "==", userId));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedJobs: JobRequest[] = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as JobRequest));
+            const fetchedJobs: JobRequest[] = snapshot.docs.map(
+                (doc) =>
+                    ({
+                        id: doc.id,
+                        ...doc.data(),
+                    } as JobRequest)
+            );
 
             setJobs(fetchedJobs);
             setIsLoading(false);
@@ -152,19 +158,14 @@ export default function UserDashboard() {
     useEffect(() => {
         if (!userId) return;
 
-        const q = query(
-            collection(db, "notifications"),
-            where("recipientId", "==", userId),
-            limit(20) // Increased limit since we sort client side
-        );
+        const q = query(collection(db, "notifications"), where("recipientId", "==", userId), limit(20));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedNotifs = snapshot.docs.map(doc => ({
+            const fetchedNotifs = snapshot.docs.map((doc) => ({
                 id: doc.id,
-                ...doc.data()
+                ...doc.data(),
             }));
 
-            // Client-side sort
             fetchedNotifs.sort((a: any, b: any) => {
                 const dateA = a.createdAt?.seconds ? new Date(a.createdAt.seconds * 1000).getTime() : 0;
                 const dateB = b.createdAt?.seconds ? new Date(b.createdAt.seconds * 1000).getTime() : 0;
@@ -187,10 +188,11 @@ export default function UserDashboard() {
                 try {
                     const notifRef = doc(db, "notifications", n.id);
                     await updateDoc(notifRef, { read: true });
-                } catch (e) { console.error(e); }
+                } catch (e) {
+                    console.error(e);
+                }
             }
         });
-        // Optimistic update
         setUnreadCount(0);
     };
 
@@ -203,27 +205,46 @@ export default function UserDashboard() {
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case "pending": return <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 flex items-center gap-1 w-fit"><Clock className="w-3 h-3" /> Pending</span>;
+            case "pending":
+                return (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 flex items-center gap-1 w-fit">
+                        <Clock className="w-3 h-3" /> Pending
+                    </span>
+                );
             case "accepted":
-            case "in_progress": return <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 flex items-center gap-1 w-fit"><Zap className="w-3 h-3" /> Active</span>;
-            case "fully_completed": return <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3" /> Done</span>;
+            case "in_progress":
+                return (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 flex items-center gap-1 w-fit">
+                        <Zap className="w-3 h-3" /> Active
+                    </span>
+                );
+            case "fully_completed":
+                return (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-3 h-3" /> Done
+                    </span>
+                );
             case "cancelled":
-            case "rejected": return <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 flex items-center gap-1 w-fit"><XCircle className="w-3 h-3" /> Closed</span>;
-            case "partially_completed": return <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1 w-fit"><AlertTriangle className="w-3 h-3" /> Attention</span>;
-            default: return null;
+            case "rejected":
+                return (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 flex items-center gap-1 w-fit">
+                        <XCircle className="w-3 h-3" /> Closed
+                    </span>
+                );
+            case "partially_completed":
+                return (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1 w-fit">
+                        <AlertTriangle className="w-3 h-3" /> Attention
+                    </span>
+                );
+            default:
+                return null;
         }
     };
 
     return (
         <div className="font-sans">
-            {/* Header was here */}
-
-            {/* Body */}
             <div className="max-w-7xl mx-auto space-y-10">
-
-
-
-                {/* Body */}
                 <div className="max-w-7xl mx-auto space-y-6 md:space-y-10 p-4 md:p-6">
                     {/* Concierge / Core Services */}
                     <section>
@@ -232,34 +253,39 @@ export default function UserDashboard() {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-bold text-gray-900">What do you need help with?</h3>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            {[
-                                { label: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
-                                { label: "Electrical", icon: Zap, color: "text-yellow-500", bg: "bg-yellow-50" },
-                                { label: "Cleaning", icon: Sparkles, color: "text-purple-500", bg: "bg-purple-50" },
-                                { label: "Repairs", icon: Wrench, color: "text-orange-500", bg: "bg-orange-50" },
-                                { label: "HVAC", icon: Thermometer, color: "text-cyan-500", bg: "bg-cyan-50" },
-                            ].map((service, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => handleOpenWizard(service.label.toLowerCase())}
-                                    className="flex flex-col items-center justify-center p-4 md:p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-orange-100 transition-all group"
-                                >
-                                    <div className={`p-4 rounded-full mb-3 ${service.bg} ${service.color} group-hover:scale-110 transition-transform`}>
-                                        <service.icon className="w-8 h-8" />
-                                    </div>
-                                    <span className="font-semibold text-gray-700 group-hover:text-orange-600 transition-colors text-center text-sm">{service.label}</span>
-                                </button>
-                            ))}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                            {activeCategories.slice(0, 6).map((service) => {
+                                const Icon = getLucideIcon(service.iconKey);
+                                return (
+                                    <button
+                                        key={service.id}
+                                        onClick={() => handleOpenWizard(service.id)}
+                                        className="flex flex-col items-center justify-center p-4 md:p-5 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-orange-100 transition-all group cursor-pointer"
+                                    >
+                                        <div
+                                            className="p-3.5 rounded-full mb-3 group-hover:scale-110 transition-transform"
+                                            style={{
+                                                backgroundColor: `${service.colorHex}18`,
+                                                color: service.colorHex,
+                                            }}
+                                        >
+                                            <Icon className="w-7 h-7" />
+                                        </div>
+                                        <span className="font-semibold text-gray-700 group-hover:text-orange-600 transition-colors text-center text-xs md:text-sm line-clamp-1">
+                                            {service.shortTitle}
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </section>
 
-                    {/* NEW: Request Wizard */}
+                    {/* Request Wizard */}
                     <RequestWizard
                         isOpen={isWizardOpen}
                         onClose={() => {
                             setIsWizardOpen(false);
-                            setMagicDescription(""); // Clear on close
+                            setMagicDescription("");
                         }}
                         initialCategory={selectedCategory}
                         initialDescription={magicDescription}
@@ -284,7 +310,7 @@ export default function UserDashboard() {
                                         <Briefcase className="w-8 h-8" />
                                     </div>
                                     <h4 className="text-lg font-bold text-gray-900">No requests yet</h4>
-                                    <p className="text-gray-500 mb-6">You haven't booked any services yet.</p>
+                                    <p className="text-gray-500 mb-6">You haven&apos;t booked any services yet.</p>
                                 </div>
                             ) : (
                                 <div className="p-6">
@@ -312,7 +338,12 @@ export default function UserDashboard() {
                                 </div>
                             )}
                         </div>
-                    </section >
+                    </section>
+
+                    {/* Verified Service Providers Discovery */}
+                    <section className="pt-2">
+                        <VerifiedProvidersDirectory />
+                    </section>
                 </div>
 
                 {chatJob && userId && (

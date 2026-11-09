@@ -12,7 +12,7 @@ import {
     Search
 } from "lucide-react";
 import { db, storage, auth } from "../../../../lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import ChatSheet from "../../../../components/chat/ChatSheet";
@@ -20,7 +20,8 @@ import ChatSheet from "../../../../components/chat/ChatSheet";
 import { JobRequest } from "../../../../components/dashboard/provider/types";
 import { JobListItem } from "../../../../components/dashboard/provider/JobListItem";
 import { JobDetailView } from "../../../../components/dashboard/provider/JobDetailView";
-import { formatJobLocation } from "@/lib/job-utils";
+import AssignAssistantModal from "../../../../components/dashboard/provider/AssignAssistantModal";
+import { formatJobLocation, formatRequestCode } from "@/lib/job-utils";
 
 export default function MyJobsPage() {
     const router = useRouter();
@@ -29,6 +30,7 @@ export default function MyJobsPage() {
     const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
     const [jobs, setJobs] = useState<JobRequest[]>([]);
     const [providerId, setProviderId] = useState<string | null>(null);
+    const [providerName, setProviderName] = useState<string>("Provider");
     const [isLoading, setIsLoading] = useState(true);
 
     // Chat State
@@ -37,6 +39,7 @@ export default function MyJobsPage() {
     // Modal States
     const [isStartModalOpen, setIsStartModalOpen] = useState(false);
     const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+    const [isAssignAssistantModalOpen, setIsAssignAssistantModalOpen] = useState(false);
 
     // Start Job Form
     const [estimatedTime, setEstimatedTime] = useState("");
@@ -44,6 +47,8 @@ export default function MyJobsPage() {
 
     // Complete Job Form
     const [completionType, setCompletionType] = useState<'full' | 'partial'>('full');
+    const [finalAgreedFee, setFinalAgreedFee] = useState<string>("");
+    const [completionSummary, setCompletionSummary] = useState<string>("");
     const [partialReason, setPartialReason] = useState("");
     const [partialPhoto, setPartialPhoto] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -62,6 +67,7 @@ export default function MyJobsPage() {
                 const userDoc = await getDoc(doc(db, "users", storedId));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
+                    setProviderName(data.fullName || data.name || "Provider");
                     if (data.status !== 'approved') {
                         if (data.status === 'pending_review' || data.status === 'pending' || data.status === 'rejected') {
                             router.replace("/dashboard/pending");
@@ -94,6 +100,23 @@ export default function MyJobsPage() {
 
         let directJobs: JobRequest[] = [];
         let invitedJobs: JobRequest[] = [];
+        const clientNameCache: Record<string, string> = {};
+
+        const normalizeJob = (id: string, data: any): JobRequest => {
+            const cId = String(data.clientId || data.userId || "");
+            const rawName = String(data.clientName || data.userName || data.customerName || "").trim();
+            const resolvedName =
+                rawName && rawName !== "Client" && rawName !== "Unknown Client"
+                    ? rawName
+                    : clientNameCache[cId] || "";
+            return {
+                id,
+                ...data,
+                clientId: cId,
+                clientName: resolvedName || rawName || undefined,
+                budget: Number(data.budget ?? data.price ?? 0),
+            } as JobRequest;
+        };
 
         const updateCombinedJobs = () => {
             const allJobs = [...directJobs, ...invitedJobs];
@@ -107,11 +130,44 @@ export default function MyJobsPage() {
             });
 
             setJobs(uniqueJobs);
+            setSelectedJob(prev => {
+                if (!prev) return uniqueJobs[0] || null;
+                return uniqueJobs.find(j => j.id === prev.id) || prev;
+            });
             setIsLoading(false);
+
+            // Backfill missing client names from users/{clientId}
+            uniqueJobs.forEach(async (j) => {
+                const cId = j.clientId || (j as any).userId;
+                if (!cId || clientNameCache[cId]) return;
+                if (j.clientName && j.clientName !== "Client" && j.clientName !== "Unknown Client") return;
+                try {
+                    const uSnap = await getDoc(doc(db, "users", cId));
+                    if (uSnap.exists()) {
+                        const u = uSnap.data();
+                        const name = String(u.fullName || u.displayName || u.name || u.email || "").trim();
+                        if (name) {
+                            clientNameCache[cId] = name;
+                            setJobs(curr =>
+                                curr.map(item =>
+                                    (item.clientId || (item as any).userId) === cId
+                                        ? { ...item, clientName: name }
+                                        : item
+                                )
+                            );
+                            setSelectedJob(curr =>
+                                curr && (curr.clientId || (curr as any).userId) === cId
+                                    ? { ...curr, clientName: name }
+                                    : curr
+                            );
+                        }
+                    }
+                } catch (_) {}
+            });
         };
 
         const unsubscribe1 = onSnapshot(q1, (snapshot) => {
-            directJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+            directJobs = snapshot.docs.map(d => normalizeJob(d.id, d.data()));
             updateCombinedJobs();
         }, (error) => {
             console.warn("Notice fetching direct jobs:", error);
@@ -119,7 +175,7 @@ export default function MyJobsPage() {
         });
 
         const unsubscribe2 = onSnapshot(q2, (snapshot) => {
-            invitedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JobRequest));
+            invitedJobs = snapshot.docs.map(d => normalizeJob(d.id, d.data()));
             updateCombinedJobs();
         }, (error) => {
             console.warn("Notice fetching invited jobs:", error);
@@ -136,14 +192,16 @@ export default function MyJobsPage() {
     const filteredJobs = jobs.filter(job => {
         const locString = formatJobLocation(job.location);
 
+        const reqCode = formatRequestCode(job).toLowerCase();
         const matchesSearch = (job.serviceType || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
             (job.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-            locString.toLowerCase().includes(searchTerm.toLowerCase());
+            locString.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            reqCode.includes(searchTerm.replace(/^#/, "").toLowerCase());
 
         let matchesStatus = true;
-        if (filter === "pending") matchesStatus = job.status === "pending";
-        if (filter === "active") matchesStatus = ["accepted", "in_progress"].includes(job.status);
-        if (filter === "completed") matchesStatus = ["fully_completed", "partially_completed", "cancelled", "rejected"].includes(job.status);
+        if (filter === "pending") matchesStatus = job.status === "pending" || (job.status as string) === "open";
+        if (filter === "active") matchesStatus = ["accepted", "in_progress", "awaiting_confirmation", "partially_completed"].includes(job.status);
+        if (filter === "completed") matchesStatus = ["fully_completed", "completed", "cancelled", "rejected"].includes(job.status);
 
         return matchesSearch && matchesStatus;
     });
@@ -153,9 +211,12 @@ export default function MyJobsPage() {
         try {
             const jobRef = doc(db, "job_requests", jobId);
             const nowIso = new Date().toISOString();
-            const updates: any = { status: action };
+            const updates: any = { status: action, updatedAt: nowIso };
             if (action === 'accepted' && providerId) {
                 updates.providerId = providerId;
+                updates.hodId = providerId;
+                updates.hodName = providerName;
+                updates.routingStatus = "hod_self_handled";
                 updates.acceptedAt = nowIso;
             }
 
@@ -166,24 +227,37 @@ export default function MyJobsPage() {
 
             const targetJob = jobs.find(j => j.id === jobId);
             const targetClient = targetJob?.clientId || (targetJob as any)?.userId;
-            if (targetClient) {
-                const notifTitle = action === 'accepted' ? "Job Accepted! 🎉" : "Job Declined";
-                const notifMsg = action === 'accepted'
-                    ? `Your request for ${targetJob?.serviceType || 'service'} has been accepted.`
-                    : `Provider is unavailable for ${targetJob?.serviceType || 'service'}.`;
+            if (targetClient && action === 'accepted') {
+                const reqCode = formatRequestCode(targetJob || jobId);
                 try {
-                    await updateDoc(doc(db, "job_requests", jobId), { clientNotified: true });
+                    await addDoc(collection(db, "notifications"), {
+                        userId: targetClient,
+                        recipientId: targetClient,
+                        title: `State HOD Accepted Request (#${reqCode}) 🛠️`,
+                        message: `${providerName} (Department HOD) accepted your ${targetJob?.serviceType || "service"} request (#${reqCode}) and will handle it personally. Ask them to quote #${reqCode} at your door.`,
+                        body: `${providerName} (Department HOD) accepted your ${targetJob?.serviceType || "service"} request (#${reqCode}) and will handle it personally. Ask them to quote #${reqCode} at your door.`,
+                        type: "success",
+                        read: false,
+                        isRead: false,
+                        createdAt: nowIso,
+                        payload: { jobId, requestCode: reqCode },
+                    });
                 } catch (_) {}
             }
 
             if (selectedJob?.id === jobId) {
                 // Optimistic update
-                setSelectedJob(prev => prev ? { ...prev, status: action, ...(action === 'accepted' ? { providerId } : {}) } : null);
+                setSelectedJob(prev => prev ? { ...prev, status: action, ...(action === 'accepted' ? { providerId, hodName: providerName } : {}) } : null);
             }
         } catch (error) {
             console.error("Error updating status:", error);
             alert("Failed to update status.");
         }
+    };
+
+    const handleOpenAssignAssistantModal = (job: JobRequest) => {
+        setSelectedJob(job);
+        setIsAssignAssistantModalOpen(true);
     };
 
     const handleOpenStartModal = (job: JobRequest) => {
@@ -215,7 +289,6 @@ export default function MyJobsPage() {
             } catch (_) {}
 
             setIsStartModalOpen(false);
-            // Update selected job locally to reflect change immediately in detail view (if snapshot is slow)
             setSelectedJob(prev => prev ? { ...prev, status: 'in_progress' } : null);
         } catch (error) {
             console.error("Error starting job:", error);
@@ -226,6 +299,8 @@ export default function MyJobsPage() {
     const handleOpenCompleteModal = (job: JobRequest) => {
         setSelectedJob(job);
         setCompletionType('full');
+        setFinalAgreedFee(String(job.budget || ""));
+        setCompletionSummary((job as any).completionSummary || "");
         setPartialReason("");
         setPartialPhoto(null);
         setIsCompleteModalOpen(true);
@@ -239,16 +314,31 @@ export default function MyJobsPage() {
             const jobRef = doc(db, "job_requests", selectedJob.id);
 
             if (completionType === 'full') {
-                const completeUpdates = {
-                    status: 'fully_completed',
+                const parsedFee = Number(String(finalAgreedFee).replace(/,/g, "").trim());
+                if (!Number.isFinite(parsedFee) || parsedFee <= 0) {
+                    alert("Please enter a valid Final Agreed Fee (₦).");
+                    return;
+                }
+                if (!completionSummary.trim()) {
+                    alert("Please provide a brief summary of the work completed.");
+                    return;
+                }
+                const initialEst = Number((selectedJob as any).initialBudget ?? selectedJob.budget ?? 0);
+                const completeUpdates: any = {
+                    status: 'awaiting_confirmation',
                     actualEndTime: nowIso,
-                    completedAt: nowIso
+                    updatedAt: nowIso,
+                    initialBudget: initialEst > 0 ? initialEst : parsedFee,
+                    finalAgreedPrice: parsedFee,
+                    budget: parsedFee,
+                    price: parsedFee,
+                    completionSummary: completionSummary.trim()
                 };
                 await updateDoc(jobRef, completeUpdates);
                 try {
                     await updateDoc(doc(db, "requests", selectedJob.id), completeUpdates);
                 } catch (_) {}
-                setSelectedJob(prev => prev ? { ...prev, status: 'fully_completed' } : null);
+                setSelectedJob(prev => prev ? { ...prev, ...completeUpdates } : null);
             } else {
                 if (!partialReason) {
                     alert("Please provide a reason for partial completion.");
@@ -294,10 +384,10 @@ export default function MyJobsPage() {
     };
 
     return (
-        <div className="font-sans flex text-gray-900 h-[calc(100vh-64px)] overflow-hidden bg-white">
+        <div className="font-sans flex text-gray-900 h-[calc(100vh-148px)] min-h-[540px] rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden bg-white">
 
             {/* List Panel */}
-            <div className={`w-full lg:w-1/3 flex-col border-r border-gray-200 bg-white ${selectedJob ? 'hidden lg:flex' : 'flex'}`}>
+            <div className={`w-full lg:w-[340px] xl:w-[380px] shrink-0 flex-col border-r border-gray-200 bg-white ${selectedJob ? 'hidden lg:flex' : 'flex'}`}>
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-gray-100 flex-none bg-white z-10">
                     <h1 className="text-xl font-bold text-gray-900 mb-3">Inbox</h1>
@@ -359,17 +449,27 @@ export default function MyJobsPage() {
             </div>
 
             {/* Detail Panel */}
-            <div className={`w-full lg:w-2/3 bg-gray-50 flex flex-col h-full bg-white ${selectedJob ? 'flex' : 'hidden lg:flex'}`}>
+            <div className={`flex-1 min-w-0 bg-gray-50/40 flex flex-col h-full ${selectedJob ? 'flex' : 'hidden lg:flex'}`}>
                 <JobDetailView
                     job={selectedJob}
                     onBack={() => setSelectedJob(null)}
                     onStatusUpdate={handleStatusUpdate}
                     onStartJob={handleOpenStartModal}
                     onCompleteJob={handleOpenCompleteModal}
+                    onAssignAssistant={handleOpenAssignAssistantModal}
                     onChat={() => setIsChatOpen(true)}
                     className="h-full"
                 />
             </div>
+
+            {/* ASSIGN ASSISTANT MODAL */}
+            <AssignAssistantModal
+                isOpen={isAssignAssistantModalOpen && Boolean(selectedJob)}
+                job={selectedJob}
+                hodUid={providerId || ""}
+                hodName={providerName}
+                onClose={() => setIsAssignAssistantModalOpen(false)}
+            />
 
             {/* START JOB MODAL */}
             {isStartModalOpen && selectedJob && (
@@ -450,15 +550,44 @@ export default function MyJobsPage() {
                         </div>
 
                         {completionType === 'full' ? (
-                            <div className="text-center py-6">
-                                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Check className="w-8 h-8" />
+                            <div className="space-y-4">
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 text-xs text-emerald-800 leading-relaxed">
+                                    Confirm the <strong>Final Agreed Fee</strong> (keep the client&apos;s initial estimate or update if extra parts/repairs were agreed upon on-site) and summarize what was fixed.
                                 </div>
-                                <h3 className="text-lg font-bold text-gray-900">Great Job!</h3>
-                                <p className="text-gray-500 mb-6">Confirming this will mark the job as 100% complete and notify the client.</p>
 
-                                <button onClick={submitCompleteJob} className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors shadow-lg shadow-green-200">
-                                    Confirm Completion
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                                        Final Agreed Fee (₦) *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-base font-bold text-gray-900"
+                                        placeholder="e.g. 15000"
+                                        value={finalAgreedFee}
+                                        onChange={e => setFinalAgreedFee(e.target.value)}
+                                    />
+                                    {selectedJob.budget ? (
+                                        <p className="text-[11px] text-gray-500 mt-1">
+                                            Client&apos;s initial estimate: <strong>₦{Number((selectedJob as any).initialBudget ?? selectedJob.budget).toLocaleString()}</strong>
+                                        </p>
+                                    ) : null}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                                        Work Completed / Parts Summary *
+                                    </label>
+                                    <textarea
+                                        className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
+                                        placeholder="Describe what was repaired, parts replaced, and testing completed..."
+                                        rows={3}
+                                        value={completionSummary}
+                                        onChange={e => setCompletionSummary(e.target.value)}
+                                    />
+                                </div>
+
+                                <button onClick={submitCompleteJob} className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors shadow-lg shadow-green-200 cursor-pointer">
+                                    Submit Work & Final Bill for Client Approval
                                 </button>
                             </div>
                         ) : (
@@ -522,7 +651,7 @@ export default function MyJobsPage() {
                     onClose={() => setIsChatOpen(false)}
                     jobId={selectedJob.id}
                     currentUserId={providerId}
-                    currentUserName="Provider"
+                    currentUserName={providerName}
                     recipientName={selectedJob.clientName || "Client"}
                 />
             )}

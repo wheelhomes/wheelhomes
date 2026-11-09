@@ -139,6 +139,8 @@ export const RequestServices = {
 
         const updateData: any = {
             status: 'fully_completed',
+            clientApproved: true,
+            clientApprovedAt: now,
             completedAt: now,
             chatLocked: true, // Only locked after user confirms
             updatedAt: now,
@@ -149,5 +151,8 @@ export const RequestServices = {
         };
 
         await updateDoc(doc(db, COLLECTION_NAME, requestId), updateData);
+        try {
+            await updateDoc(doc(db, "requests", requestId), updateData);
+        } catch (_) {}
     }
 };

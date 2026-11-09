@@ -7,6 +7,9 @@ class ChatMessage {
   final String senderName;
   final String role; // 'user' | 'provider' | 'agent' | 'admin'
   final DateTime createdAt;
+  final String status; // 'sent' | 'delivered' | 'read'
+  final bool delivered;
+  final bool read;
 
   ChatMessage({
     required this.id,
@@ -15,6 +18,9 @@ class ChatMessage {
     required this.senderName,
     required this.role,
     required this.createdAt,
+    this.status = 'sent',
+    this.delivered = false,
+    this.read = false,
   });
 
   factory ChatMessage.fromMap(Map<String, dynamic> map, String id) {
@@ -28,6 +34,15 @@ class ChatMessage {
       parsedDate = DateTime.now();
     }
 
+    final isRead = map['read'] == true || map['status'] == 'read';
+    final isDelivered =
+        isRead || map['delivered'] == true || map['status'] == 'delivered';
+    final resolvedStatus = isRead
+        ? 'read'
+        : isDelivered
+            ? 'delivered'
+            : (map['status'] ?? 'sent').toString();
+
     return ChatMessage(
       id: id,
       text: map['text'] ?? '',
@@ -35,6 +50,9 @@ class ChatMessage {
       senderName: map['senderName'] ?? 'User',
       role: map['role'] ?? 'user',
       createdAt: parsedDate,
+      status: resolvedStatus,
+      delivered: isDelivered,
+      read: isRead,
     );
   }
 
@@ -44,6 +62,9 @@ class ChatMessage {
       'senderId': senderId,
       'senderName': senderName,
       'role': role,
+      'status': status,
+      'delivered': delivered,
+      'read': read,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }

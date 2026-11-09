@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, Bell, Settings, ChevronDown, Menu } from "lucide-react";
+import { LogOut, Bell, Settings, ChevronDown, Menu, CheckCheck } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "../../../lib/firebase";
-import { doc, getDoc, collection, query, where, onSnapshot, limit } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, onSnapshot, limit, updateDoc } from "firebase/firestore";
+import { formatNotificationTime } from "@/lib/notifications";
 import Sidebar from "../../../components/dashboard/Sidebar";
 
 export default function UserDashboardLayout({
@@ -109,14 +110,14 @@ export default function UserDashboardLayout({
                     const unique = combined.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
 
                     unique.sort((a, b) => {
-                        const tA = a.createdAt?.seconds || 0;
-                        const tB = b.createdAt?.seconds || 0;
-                        return tB - tA;
+                        const tA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+                        const tB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+                        return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
                     });
 
                     const final = unique.slice(0, 15);
                     setNotifications(final);
-                    setUnreadCount(final.filter((n: any) => !n.read).length);
+                    setUnreadCount(final.filter((n: any) => !n.read && !n.isRead).length);
                 };
 
                 const unsubscribeUserNotif = onSnapshot(userNotifQuery, (snapshot) => {
@@ -195,31 +196,95 @@ export default function UserDashboardLayout({
 
                             {/* Notifications Dropdown */}
                             {showNotifications && (
-                                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
-                                    <div className="p-3 border-b border-gray-100 bg-gray-50">
-                                        <h3 className="font-bold text-gray-900 text-sm">Notifications</h3>
+                                <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50">
+                                    <div className="p-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-gray-900 text-sm">Notifications</h3>
+                                            {unreadCount > 0 && (
+                                                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold">
+                                                    {unreadCount} new
+                                                </span>
+                                            )}
+                                        </div>
+                                        {unreadCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    notifications
+                                                        .filter((n: any) => !n.read && !n.isRead && n.recipientId !== "all")
+                                                        .forEach((n: any) => {
+                                                            updateDoc(doc(db, "notifications", n.id), {
+                                                                read: true,
+                                                                isRead: true,
+                                                            }).catch(() => {});
+                                                        });
+                                                }}
+                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 cursor-pointer"
+                                            >
+                                                <CheckCheck className="w-3.5 h-3.5" />
+                                                Mark all read
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="max-h-64 overflow-y-auto">
+                                    <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
                                         {notifications.length === 0 ? (
                                             <div className="p-4 text-center text-gray-400 text-sm py-8">
                                                 <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                                 No notifications yet
                                             </div>
                                         ) : (
-                                            notifications.map((notif: any) => (
-                                                <div key={notif.id} className={`p-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!notif.read ? 'bg-orange-50/50' : ''}`}>
-                                                    <p className="text-sm text-gray-800 font-medium line-clamp-2">{notif.title}</p>
-                                                    <p className="text-xs text-gray-500 mt-1">{notif.message}</p>
-                                                    <p className="text-[10px] text-gray-400 mt-2 text-right">
-                                                        {notif.createdAt?.seconds ? new Date(notif.createdAt.seconds * 1000).toLocaleDateString() : 'Just now'}
-                                                    </p>
-                                                </div>
-                                            ))
+                                            notifications.map((notif: any) => {
+                                                const isUnread = !notif.read && !notif.isRead;
+                                                const jobId = notif.payload?.jobId || notif.jobId || notif.requestId;
+                                                return (
+                                                    <div
+                                                        key={notif.id}
+                                                        onClick={() => {
+                                                            if (isUnread && notif.recipientId !== "all") {
+                                                                updateDoc(doc(db, "notifications", notif.id), {
+                                                                    read: true,
+                                                                    isRead: true,
+                                                                }).catch(() => {});
+                                                            }
+                                                            setShowNotifications(false);
+                                                            const targetLink =
+                                                                notif.link ||
+                                                                notif.payload?.link ||
+                                                                (jobId
+                                                                    ? `/dashboard/my-requests/details?id=${jobId}`
+                                                                    : "/dashboard/my-requests");
+                                                            router.push(targetLink);
+                                                        }}
+                                                        className={`p-3.5 hover:bg-gray-50 transition-colors cursor-pointer ${
+                                                            isUnread ? "bg-orange-50/50" : ""
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <p className={`text-xs ${isUnread ? "font-bold text-gray-900" : "font-semibold text-gray-800"} line-clamp-1`}>
+                                                                {notif.title}
+                                                            </p>
+                                                            {isUnread && (
+                                                                <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1" />
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                                            {notif.message || notif.body}
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-400 mt-1.5 text-right">
+                                                            {formatNotificationTime(notif.createdAt)}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })
                                         )}
                                     </div>
-                                    <div className="p-2 border-t border-gray-100 bg-gray-50 text-center">
-                                        <Link href="/dashboard/notifications" className="text-xs font-bold text-gray-900 hover:underline">
-                                            View all
+                                    <div className="p-2.5 border-t border-gray-100 bg-gray-50 text-center">
+                                        <Link
+                                            href="/dashboard/notifications"
+                                            onClick={() => setShowNotifications(false)}
+                                            className="text-xs font-bold text-gray-900 hover:underline"
+                                        >
+                                            View all notifications →
                                         </Link>
                                     </div>
                                 </div>

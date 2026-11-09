@@ -22,23 +22,7 @@ import {
 import { compressImageToBase64 } from "../../../lib/image-utils";
 import { sendPendingReviewEmailAction } from "@/app/actions/email";
 import { isEmailVerifiedGlobally } from "@/lib/auth-helpers";
-
-// 13 Canonical Service Categories matching Mobile 1:1
-const SERVICE_CATEGORIES = [
-    "General Maintenance",
-    "Plumbing & Pipefitting",
-    "Electrical & Wiring",
-    "Carpentry & Woodwork",
-    "Painting & Wall Finishes",
-    "HVAC & AC Repair",
-    "Masonry, Tiling & Flooring",
-    "Roofing & Ceiling",
-    "Cleaning & Fumigation",
-    "Welding & Metal Fabrication",
-    "Landscaping & Gardening",
-    "Appliance Repair",
-    "Solar & Inverter Systems"
-];
+import { useServiceCategories } from "@/lib/service-categories";
 
 // 4 Canonical Government ID Options matching Mobile 1:1
 const ID_OPTIONS = [
@@ -74,6 +58,8 @@ interface JobPhotoItem {
 
 export default function RegisterProviderPage() {
     const router = useRouter();
+    const { activeCategories } = useServiceCategories();
+    const SERVICE_CATEGORIES = activeCategories.map((c) => c.name);
     const [isLoading, setIsLoading] = useState(false);
     const [user, setUser] = useState<any>(null);
 

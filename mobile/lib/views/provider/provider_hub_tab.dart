@@ -511,46 +511,49 @@ class _ProviderProHubTabState extends State<ProviderProHubTab> {
           ),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        onTap: onTap,
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: iconBgColor,
-            borderRadius: BorderRadius.circular(12),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          onTap: onTap,
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconBgColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-          child: Icon(icon, color: iconColor, size: 20),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (trailingText != null)
-              Text(
-                trailingText,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primary),
-              ),
-            if (trailingBadge != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: (trailingBadgeColor ?? AppTheme.primary).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          subtitle: Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (trailingText != null)
+                Text(
+                  trailingText,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primary),
                 ),
-                child: Text(
-                  trailingBadge,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: trailingBadgeColor ?? AppTheme.primary,
+              if (trailingBadge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (trailingBadgeColor ?? AppTheme.primary).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    trailingBadge,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: trailingBadgeColor ?? AppTheme.primary,
+                    ),
                   ),
                 ),
-              ),
-            const SizedBox(width: 6),
-            const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textSecondary),
-          ],
+              const SizedBox(width: 6),
+              const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textSecondary),
+            ],
+          ),
         ),
       ),
     );

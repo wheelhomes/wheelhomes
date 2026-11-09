@@ -38,3 +38,44 @@ export function formatJobBudget(budget?: number | null, price?: number | null): 
     if (val === undefined || val === null || isNaN(Number(val))) return "Flexible / Negotiable";
     return `₦${Number(val).toLocaleString()}`;
 }
+
+/**
+ * Generates a fresh 6-digit human-readable Request ID (`WOC-XXXXXX`) at request creation time.
+ */
+export function generateRequestCode(): string {
+    const num = Math.floor(100000 + Math.random() * 900000);
+    return `WOC-${num}`;
+}
+
+/**
+ * Resolves the canonical human-readable Request ID (`WOC-XXXXXX`) for any job/request.
+ * Uses stored `requestCode` / `trackingId` if present, or deterministically derives the exact
+ * same 6-digit `WOC-XXXXXX` code from the Firestore document ID (matching Flutter Mobile 100%).
+ */
+export function formatRequestCode(jobOrId: any): string {
+    if (!jobOrId) return "WOC-000000";
+    if (typeof jobOrId === "object") {
+        const explicit = String(jobOrId.requestCode || jobOrId.trackingId || "").trim();
+        if (explicit) {
+            return explicit.toUpperCase().startsWith("WOC-")
+                ? explicit.toUpperCase()
+                : `WOC-${explicit.toUpperCase()}`;
+        }
+        const docId = String(jobOrId.id || "").trim();
+        if (!docId) return "WOC-000000";
+        return deriveRequestCodeFromId(docId);
+    }
+    const raw = String(jobOrId).trim();
+    if (!raw) return "WOC-000000";
+    if (raw.toUpperCase().startsWith("WOC-")) return raw.toUpperCase();
+    return deriveRequestCodeFromId(raw);
+}
+
+export function deriveRequestCodeFromId(id: string): string {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = (hash * 31 + id.charCodeAt(i)) % 900000;
+    }
+    const sixDigits = String((hash % 900000) + 100000).padStart(6, "0");
+    return `WOC-${sixDigits}`;
+}

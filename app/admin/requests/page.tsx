@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { db } from "../../../lib/firebase";
-import { collection, query, onSnapshot, doc, getDoc, orderBy, limit, where } from "firebase/firestore";
+import { auth, db } from "../../../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, query, onSnapshot, doc, getDoc, getDocs, orderBy, limit, where } from "firebase/firestore";
 import {
     Search,
     Clock,
@@ -20,9 +21,27 @@ import {
     Smartphone,
     Globe,
     CreditCard,
+    Trash2,
+    Ban,
+    Lock,
+    Crown,
+    UserCheck,
     Image as ImageIcon
 } from "lucide-react";
 import { UnifiedChat } from "@/components/chat/UnifiedChat";
+import {
+    canHardDeleteRequest,
+    cancelJobRequestByAdmin,
+    purgeSelectedTestData,
+    isLikelyTestAccount,
+} from "@/lib/service-categories";
+import {
+    useHodDirectory,
+    assignJobToHodByAdmin,
+    matchNigerianState,
+} from "@/lib/hod-routing";
+import AssignAssistantModal from "@/components/dashboard/provider/AssignAssistantModal";
+import { formatRequestCode } from "@/lib/job-utils";
 
 interface JobRequest {
     id: string;
@@ -42,6 +61,23 @@ interface JobRequest {
     escrowAmount?: number;
     images?: string[];
     rejectionReason?: string;
+
+    // HOD Smart Routing & Assistant Dispatch
+    hodId?: string;
+    hodName?: string;
+    hodDepartment?: string;
+    clientState?: string;
+    routingMode?: string;
+    preferredTime?: string;
+    assignedAssistant?: {
+        id: string;
+        name: string;
+        phone: string;
+        area: string;
+    };
+    assistantName?: string;
+    assistantPhone?: string;
+    assistantArea?: string;
 
     // Timing & Partial completion
     startTime?: any;
@@ -67,8 +103,10 @@ interface UserDetails {
 }
 
 export default function AdminServiceRequestsPage() {
+    const { activeAssignments: hodAssignments, assistants: directoryAssistants } = useHodDirectory();
     const [jobs, setJobs] = useState<JobRequest[]>([]);
     const [providersMap, setProvidersMap] = useState<Record<string, string>>({}); // Map ID -> Name
+    const [approvedProvidersList, setApprovedProvidersList] = useState<Array<{ id: string; name: string; state?: string }>>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState("All");
     const [filterSource, setFilterSource] = useState<"All" | "web" | "mobile">("All");
@@ -79,13 +117,25 @@ export default function AdminServiceRequestsPage() {
     const [providerDetails, setProviderDetails] = useState<UserDetails | null>(null);
     const [clientDetails, setClientDetails] = useState<UserDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+    const [adminSelectedHodUid, setAdminSelectedHodUid] = useState<string>("");
+    const [isAdminDispatchOpen, setIsAdminDispatchOpen] = useState(false);
 
     useEffect(() => {
         let webJobsList: JobRequest[] = [];
         let mobileJobsList: JobRequest[] = [];
+        let unsubWeb: (() => void) | undefined;
+        let unsubMobile: (() => void) | undefined;
 
         const updateAllJobs = () => {
-            const combined = [...webJobsList, ...mobileJobsList];
+            // Deduplicate by ID (mobile writes to both `job_requests` and `requests`)
+            const byId = new Map<string, JobRequest>();
+            for (const j of webJobsList) {
+                byId.set(j.id, j);
+            }
+            for (const j of mobileJobsList) {
+                byId.set(j.id, j);
+            }
+            const combined = Array.from(byId.values());
             combined.sort((a, b) => {
                 const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                 const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -95,103 +145,164 @@ export default function AdminServiceRequestsPage() {
             setIsLoading(false);
         };
 
-        // 1. Fetch Web Job Requests
-        const qWeb = query(collection(db, "job_requests"));
-        const unsubWeb = onSnapshot(qWeb, (snapshot) => {
-            webJobsList = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    source: 'web' as const,
-                    rawCollection: 'job_requests' as const,
-                    clientId: data.clientId || '',
-                    clientName: data.clientName || 'Web Client',
-                    providerId: data.providerId || '',
-                    serviceType: data.serviceType || 'Service Request',
-                    status: data.status || 'pending',
-                    description: data.description || '',
-                    location: typeof data.location === 'object' ? (data.location?.address || JSON.stringify(data.location)) : (data.location || 'Not specified'),
-                    budget: Number(data.budget || 0),
-                    paymentStatus: data.paymentStatus,
-                    escrowReference: data.escrowReference,
-                    escrowAmount: data.escrowAmount,
-                    images: data.images || [],
-                    rejectionReason: data.rejectionReason,
-                    startTime: data.startTime,
-                    estimatedDuration: data.estimatedDuration,
-                    startNote: data.startNote,
-                    actualEndTime: data.actualEndTime,
-                    completionDetails: data.completionDetails,
-                    createdAt: data.createdAt
-                };
-            });
-            updateAllJobs();
-        }, (err) => console.error("Web requests listener error", err));
+        const startListeners = () => {
+            if (unsubWeb) unsubWeb();
+            if (unsubMobile) unsubMobile();
 
-        // 2. Fetch Mobile Requests
-        const qMobile = query(collection(db, "requests"));
-        const unsubMobile = onSnapshot(qMobile, (snapshot) => {
-            mobileJobsList = snapshot.docs.map(doc => {
-                const data = doc.data();
-                let locStr = 'Not specified';
-                if (typeof data.location === 'string') locStr = data.location;
-                else if (typeof data.location === 'object' && data.location) locStr = data.location.address || data.location.city || JSON.stringify(data.location);
+            // 1. Fetch Web Job Requests
+            const qWeb = query(collection(db, "job_requests"));
+            unsubWeb = onSnapshot(
+                qWeb,
+                (snapshot) => {
+                    webJobsList = snapshot.docs.map((doc) => {
+                        const data = doc.data();
+                        const isFromMobile = Boolean(data.userId && !data.clientName);
+                        return {
+                            id: doc.id,
+                            source: isFromMobile ? ("mobile" as const) : ("web" as const),
+                            rawCollection: "job_requests" as const,
+                            clientId: data.clientId || data.userId || "",
+                            clientName: data.clientName || data.userName || "",
+                            providerId: data.providerId || "",
+                            serviceType: String(data.serviceType || data.category || "Service Request"),
+                            status: data.status || "pending",
+                            description: data.description || "",
+                            location:
+                                typeof data.location === "object" && data.location
+                                    ? data.location.address || JSON.stringify(data.location)
+                                    : data.location || "Not specified",
+                            budget: Number(data.budget || data.price || 0),
+                            paymentStatus: data.paymentStatus,
+                            escrowReference: data.escrowReference,
+                            escrowAmount: data.escrowAmount,
+                            images: data.images || data.photos || [],
+                            rejectionReason: data.rejectionReason,
+                            startTime: data.startTime,
+                            estimatedDuration: data.estimatedDuration,
+                            startNote: data.startNote,
+                            actualEndTime: data.actualEndTime,
+                            completionDetails: data.completionDetails,
+                            hodId: data.hodId || "",
+                            hodName: data.hodName || "",
+                            hodDepartment: data.hodDepartment || "",
+                            clientState: data.clientState || "",
+                            routingMode: data.routingMode || "",
+                            preferredTime: data.preferredTime || "",
+                            assignedAssistant: data.assignedAssistant,
+                            assistantName: data.assistantName || data.assignedAssistant?.name || "",
+                            assistantPhone: data.assistantPhone || data.assignedAssistant?.phone || "",
+                            assistantArea: data.assistantArea || data.assignedAssistant?.area || "",
+                            createdAt: data.createdAt,
+                        };
+                    });
+                    updateAllJobs();
+                },
+                (err) => {
+                    console.error("Web requests listener error", err);
+                    setIsLoading(false);
+                }
+            );
 
-                return {
-                    id: doc.id,
-                    source: 'mobile' as const,
-                    rawCollection: 'requests' as const,
-                    clientId: data.userId || data.clientId || '',
-                    clientName: data.clientName || data.userName || 'Mobile App User',
-                    providerId: data.providerId || '',
-                    serviceType: data.serviceType || 'Service Booking',
-                    status: data.status === 'assigned' ? 'in_progress' : (data.status || 'pending'),
-                    description: data.description || '',
-                    location: locStr,
-                    budget: Number(data.price || data.budget || 0),
-                    paymentStatus: data.paymentStatus,
-                    escrowReference: data.escrowReference,
-                    escrowAmount: data.escrowAmount,
-                    images: data.images || [],
-                    createdAt: data.createdAt
-                };
-            });
-            updateAllJobs();
-        }, (err) => console.error("Mobile requests listener error", err));
+            // 2. Fetch Mobile Requests
+            const qMobile = query(collection(db, "requests"));
+            unsubMobile = onSnapshot(
+                qMobile,
+                (snapshot) => {
+                    mobileJobsList = snapshot.docs.map((doc) => {
+                        const data = doc.data();
+                        let locStr = "Not specified";
+                        if (typeof data.location === "string") locStr = data.location;
+                        else if (typeof data.location === "object" && data.location)
+                            locStr = data.location.address || data.location.city || JSON.stringify(data.location);
 
-        // 3. Fetch Providers for lookup
-        const fetchProviders = async () => {
-            try {
-                const map: Record<string, string> = {};
+                        return {
+                            id: doc.id,
+                            source: "mobile" as const,
+                            rawCollection: "requests" as const,
+                            clientId: data.userId || data.clientId || "",
+                            clientName: data.clientName || data.userName || "",
+                            providerId: data.providerId || "",
+                            serviceType: String(data.serviceType || data.category || "Service Booking"),
+                            status: data.status === "assigned" ? "in_progress" : data.status || "pending",
+                            description: data.description || "",
+                            location: locStr,
+                            budget: Number(data.price || data.budget || 0),
+                            paymentStatus: data.paymentStatus,
+                            escrowReference: data.escrowReference,
+                            escrowAmount: data.escrowAmount,
+                            images: data.images || data.photos || [],
+                            hodId: data.hodId || "",
+                            hodName: data.hodName || "",
+                            hodDepartment: data.hodDepartment || "",
+                            clientState: data.clientState || "",
+                            routingMode: data.routingMode || "",
+                            preferredTime: data.preferredTime || "",
+                            assignedAssistant: data.assignedAssistant,
+                            assistantName: data.assistantName || data.assignedAssistant?.name || "",
+                            assistantPhone: data.assistantPhone || data.assignedAssistant?.phone || "",
+                            assistantArea: data.assistantArea || data.assignedAssistant?.area || "",
+                            createdAt: data.createdAt,
+                        };
+                    });
+                    updateAllJobs();
+                },
+                (err) => {
+                    console.error("Mobile requests listener error", err);
+                    setIsLoading(false);
+                }
+            );
 
-                // Fetch from user_applications (Service Providers)
-                const appsSnap = await import("firebase/firestore").then(mod => mod.getDocs(collection(db, "user_applications")));
-                appsSnap.docs.forEach(doc => {
-                    const d = doc.data();
-                    const details = d.data || d;
-                    const name = details.businessName || details.fullName || "Provider";
-                    map[doc.id] = name;
-                });
+            // 3. Fetch Users & Providers for lookup (resolves both provider names & client names)
+            const fetchUsersAndProviders = async () => {
+                try {
+                    const map: Record<string, string> = {};
 
-                // Fetch from users (Fallbacks)
-                const usersSnap = await import("firebase/firestore").then(mod => mod.getDocs(collection(db, "users")));
-                usersSnap.docs.forEach(doc => {
-                    if (!map[doc.id]) {
-                        const d = doc.data();
-                        map[doc.id] = d.businessName || d.fullName || "User";
-                    }
-                });
+                    const appsSnap = await getDocs(collection(db, "user_applications")).catch(() => null);
+                    appsSnap?.docs.forEach((d) => {
+                        const raw = d.data();
+                        const details = raw.data || raw;
+                        const name = details.businessName || details.fullName || details.displayName || "Provider";
+                        map[d.id] = name;
+                    });
 
-                setProvidersMap(map);
-            } catch (err) {
-                console.error("Error fetching providers map", err);
-            }
+                    const usersSnap = await getDocs(collection(db, "users")).catch(() => null);
+                    const approvedList: Array<{ id: string; name: string; state?: string }> = [];
+                    usersSnap?.docs.forEach((d) => {
+                        const u = d.data();
+                        const name = u.fullName || u.displayName || u.businessName || u.email || "User";
+                        if (!map[d.id]) {
+                            map[d.id] = name;
+                        }
+                        if (u.role === "service_provider") {
+                            approvedList.push({
+                                id: d.id,
+                                name,
+                                state: u.state || u.city || "",
+                            });
+                        }
+                    });
+
+                    setProvidersMap(map);
+                    setApprovedProvidersList(approvedList);
+                } catch (err) {
+                    console.error("Error fetching users/providers map", err);
+                }
+            };
+            fetchUsersAndProviders();
         };
-        fetchProviders();
+
+        const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                startListeners();
+            } else {
+                setIsLoading(false);
+            }
+        });
 
         return () => {
-            unsubWeb();
-            unsubMobile();
+            unsubAuth();
+            if (unsubWeb) unsubWeb();
+            if (unsubMobile) unsubMobile();
         };
     }, []);
 
@@ -263,11 +374,63 @@ export default function AdminServiceRequestsPage() {
         setClientDetails(null);
     };
 
+    const [isActionBusy, setIsActionBusy] = useState(false);
+
+    const handleCancelSelectedJob = async (job: JobRequest) => {
+        setIsActionBusy(true);
+        try {
+            await cancelJobRequestByAdmin(job.id, auth.currentUser?.email);
+            setSelectedJob((prev) => (prev && prev.id === job.id ? { ...prev, status: "cancelled" } : prev));
+        } catch (err) {
+            console.error("Failed to cancel job", err);
+        } finally {
+            setIsActionBusy(false);
+        }
+    };
+
+    const handleDeleteSelectedJob = async (job: JobRequest) => {
+        const isTest = isLikelyTestAccount(
+            job.serviceType,
+            job.clientName,
+            providersMap[job.clientId],
+            providersMap[job.providerId],
+            job.description
+        );
+        const check = canHardDeleteRequest({
+            status: job.status,
+            isTest,
+            isOrphanedClient: !clientDetails && Boolean(job.clientId),
+            paymentStatus: job.paymentStatus,
+            escrowReference: job.escrowReference,
+        });
+        if (!check.allowed) {
+            alert(check.reason || "This request is protected and cannot be permanently deleted.");
+            return;
+        }
+        setIsActionBusy(true);
+        try {
+            const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+            await purgeSelectedTestData({
+                userIds: [],
+                applicationIds: [],
+                requestIds: [job.id],
+                idToken,
+            });
+            closeModal();
+        } catch (err) {
+            console.error("Failed to delete job", err);
+        } finally {
+            setIsActionBusy(false);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
+            case "open":
             case "pending": return <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 flex items-center gap-1 w-fit"><Clock className="w-3 h-3" /> Pending</span>;
             case "accepted":
             case "in_progress": return <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 flex items-center gap-1 w-fit"><Briefcase className="w-3 h-3" /> Active</span>;
+            case "completed":
             case "fully_completed": return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3" /> Completed</span>;
             case "cancelled":
             case "rejected": return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 flex items-center gap-1 w-fit"><XCircle className="w-3 h-3" /> Rejected</span>;
@@ -278,17 +441,20 @@ export default function AdminServiceRequestsPage() {
 
     const filteredJobs = jobs.filter(job => {
         const providerName = providersMap[job.providerId] || "";
+        const resolvedClientName = job.clientName || providersMap[job.clientId] || "";
+        const reqCode = formatRequestCode(job).toLowerCase();
         const matchesSearch =
-            job.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            job.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            resolvedClientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            String(job.serviceType || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
             job.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            reqCode.includes(searchTerm.replace(/^#/, "").toLowerCase()) ||
             providerName.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesStatus = filterStatus === "All" ||
             (filterStatus === "Active" && ['accepted', 'in_progress', 'assigned'].includes(job.status)) ||
             (filterStatus === "Completed" && (job.status === 'fully_completed' || job.status === 'completed')) ||
             (filterStatus === "Rejected" && ['rejected', 'cancelled'].includes(job.status)) ||
-            (filterStatus === "Pending" && job.status === 'pending');
+            (filterStatus === "Pending" && ['pending', 'open'].includes(job.status));
 
         const matchesSource = filterSource === "All" || job.source === filterSource;
 
@@ -308,9 +474,13 @@ export default function AdminServiceRequestsPage() {
             limit(5)
         );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setAdminAlerts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
+        const unsubscribe = onSnapshot(
+            q,
+            (snapshot) => {
+                setAdminAlerts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            },
+            () => {}
+        );
         return () => unsubscribe();
     }, []);
 
@@ -467,23 +637,45 @@ export default function AdminServiceRequestsPage() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-gray-400 font-mono">#{job.id.slice(0, 8)}</div>
+                                            <div className="text-xs font-extrabold text-purple-900 font-mono">
+                                                #{formatRequestCode(job)}
+                                            </div>
                                             <div className="text-[11px] text-gray-400 mt-0.5">
                                                 {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "-"}
                                             </div>
                                         </td>
                                         <td className="p-4">
                                             <div className="font-semibold text-gray-900 text-sm">
-                                                {job.providerId ? (providersMap[job.providerId] || "Assigned Provider") : (
-                                                    <span className="text-gray-400 italic">Unassigned (Open)</span>
+                                                {job.hodName ? (
+                                                    <span className="inline-flex items-center gap-1 text-purple-900">
+                                                        <Crown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                                        HOD: {job.hodName}
+                                                    </span>
+                                                ) : job.providerId ? (
+                                                    providersMap[job.providerId] || "Assigned Provider"
+                                                ) : (
+                                                    <span className="text-amber-700 font-medium text-xs bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                                        Admin Dispatch Queue
+                                                    </span>
                                                 )}
                                             </div>
-                                            {job.providerId && (
-                                                <div className="text-xs text-gray-400 font-mono">ID: {job.providerId.slice(0, 8)}</div>
+                                            {job.clientState && (
+                                                <div className="text-[11px] text-gray-500 mt-0.5">
+                                                    State: <strong>{job.clientState}</strong>
+                                                </div>
+                                            )}
+                                            {job.assistantName && (
+                                                <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                                                    <UserCheck className="w-3 h-3" />
+                                                    Assistant: {job.assistantName}
+                                                    {job.assistantArea ? ` (${job.assistantArea})` : ""}
+                                                </div>
                                             )}
                                         </td>
                                         <td className="p-4">
-                                            <div className="font-medium text-gray-900 text-sm">{job.clientName}</div>
+                                            <div className="font-medium text-gray-900 text-sm">
+                                                {job.clientName || providersMap[job.clientId] || (job.clientId ? `User #${job.clientId.slice(0, 6)}` : "Client")}
+                                            </div>
                                             <div className="text-xs text-gray-500 truncate max-w-[150px]">{job.location}</div>
                                         </td>
                                         <td className="p-4">
@@ -717,41 +909,117 @@ export default function AdminServiceRequestsPage() {
                                             )}
                                         </div>
 
-                                        {/* 3. Provider Details */}
-                                        <div className="border border-gray-100 rounded-xl p-5 shadow-sm">
-                                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
-                                                <Briefcase className="w-4 h-4 text-orange-500" /> Assigned Provider
+                                        {/* 3. HOD Routing & Dispatched Assistant Details */}
+                                        <div className="border border-purple-100 bg-purple-50/30 rounded-xl p-5 shadow-sm space-y-4">
+                                            <h3 className="text-sm font-bold text-purple-950 uppercase tracking-wide flex items-center gap-2 border-b border-purple-100 pb-2">
+                                                <Crown className="w-4 h-4 text-purple-600" /> HOD &amp; Technician Dispatch
                                             </h3>
-                                            {providerDetails ? (
-                                                <div className="space-y-3 text-sm">
-                                                    <div>
-                                                        <div className="text-gray-500 text-xs">Provider / Business Name</div>
-                                                        <div className="font-bold text-lg text-gray-900">
-                                                            {providerDetails.businessName || providerDetails.fullName}
-                                                        </div>
-                                                        {/* Show Real Name if Business Name exists */}
-                                                        {providerDetails.businessName && (
-                                                            <div className="text-xs text-gray-500">Contact: {providerDetails.fullName}</div>
-                                                        )}
-                                                        <div className="font-mono text-xs text-orange-600 bg-orange-50 inline-block px-1 rounded mt-1">
-                                                            ID: {selectedJob.providerId}
-                                                        </div>
-                                                    </div>
 
-                                                    <div className="pt-2 border-t border-gray-50">
-                                                        <div className="flex justify-between py-1">
-                                                            <span className="text-gray-500">Email:</span>
-                                                            <span className="font-medium text-gray-900">{providerDetails.email}</span>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Detected State:</span>
+                                                    <span className="font-bold text-gray-900">
+                                                        {selectedJob.clientState ||
+                                                            matchNigerianState(selectedJob.location)?.name ||
+                                                            "Lagos"}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Department HOD:</span>
+                                                    <span className="font-bold text-purple-900">
+                                                        {selectedJob.hodName ||
+                                                            providerDetails?.businessName ||
+                                                            providerDetails?.fullName ||
+                                                            (selectedJob.providerId
+                                                                ? providersMap[selectedJob.providerId]
+                                                                : "Admin Dispatch Queue")}
+                                                    </span>
+                                                </div>
+                                                {selectedJob.assistantName && (
+                                                    <div className="p-3 rounded-lg bg-white border border-purple-200 space-y-1">
+                                                        <div className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                                            <UserCheck className="w-3.5 h-3.5" />
+                                                            Dispatched Assistant: {selectedJob.assistantName}
                                                         </div>
-                                                        <div className="flex justify-between py-1">
-                                                            <span className="text-gray-500">Phone:</span>
-                                                            <span className="font-medium text-gray-900">{providerDetails.phone || "N/A"}</span>
+                                                        <div className="text-xs text-gray-600">
+                                                            Phone: {selectedJob.assistantPhone || "N/A"} • Zone:{" "}
+                                                            {selectedJob.assistantArea || "Local Area"}
                                                         </div>
                                                     </div>
+                                                )}
+                                            </div>
+
+                                            {/* Admin Override: Route to HOD or Dispatch Assistant Directly */}
+                                            <div className="pt-3 border-t border-purple-100 space-y-2">
+                                                <label className="block text-[11px] font-bold uppercase text-purple-900">
+                                                    Admin Override — Assign / Change HOD
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={adminSelectedHodUid}
+                                                        onChange={(e) => setAdminSelectedHodUid(e.target.value)}
+                                                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-900"
+                                                    >
+                                                        <option value="">Select HOD / Provider...</option>
+                                                        {approvedProvidersList.map((p) => (
+                                                            <option key={p.id} value={p.id}>
+                                                                {p.name} {p.state ? `(${p.state})` : ""}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        type="button"
+                                                        disabled={!adminSelectedHodUid || isActionBusy}
+                                                        onClick={async () => {
+                                                            const chosen = approvedProvidersList.find(
+                                                                (p) => p.id === adminSelectedHodUid
+                                                            );
+                                                            if (!chosen) return;
+                                                            setIsActionBusy(true);
+                                                            try {
+                                                                const stName =
+                                                                    selectedJob.clientState ||
+                                                                    matchNigerianState(selectedJob.location)?.name ||
+                                                                    "Lagos";
+                                                                await assignJobToHodByAdmin({
+                                                                    jobId: selectedJob.id,
+                                                                    hodUid: chosen.id,
+                                                                    hodName: chosen.name,
+                                                                    stateName: stName,
+                                                                    categoryName: selectedJob.serviceType,
+                                                                    clientId: selectedJob.clientId,
+                                                                });
+                                                                setSelectedJob((prev) =>
+                                                                    prev
+                                                                        ? {
+                                                                              ...prev,
+                                                                              hodId: chosen.id,
+                                                                              hodName: chosen.name,
+                                                                              providerId: chosen.id,
+                                                                              clientState: stName,
+                                                                          }
+                                                                        : prev
+                                                                );
+                                                                setAdminSelectedHodUid("");
+                                                            } finally {
+                                                                setIsActionBusy(false);
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                                                    >
+                                                        Route
+                                                    </button>
                                                 </div>
-                                            ) : (
-                                                <div className="text-gray-500 text-sm italic">Provider details not found.</div>
-                                            )}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsAdminDispatchOpen(true)}
+                                                    className="w-full py-2 px-3 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-purple-900 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                                                >
+                                                    <UserCheck className="w-3.5 h-3.5" />
+                                                    Dispatch Field Assistant Directly
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -777,7 +1045,67 @@ export default function AdminServiceRequestsPage() {
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end">
+                        <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex flex-wrap items-center justify-between gap-3">
+                            {(() => {
+                                const statusLower = (selectedJob.status || "").toLowerCase();
+                                const canCancel = ![
+                                    "cancelled",
+                                    "rejected",
+                                    "completed",
+                                    "fully_completed",
+                                ].includes(statusLower);
+                                const isTest = isLikelyTestAccount(
+                                    selectedJob.serviceType,
+                                    selectedJob.clientName,
+                                    providersMap[selectedJob.clientId],
+                                    providersMap[selectedJob.providerId],
+                                    selectedJob.description
+                                );
+                                const deleteCheck = canHardDeleteRequest({
+                                    status: selectedJob.status,
+                                    isTest,
+                                    isOrphanedClient: !clientDetails && Boolean(selectedJob.clientId),
+                                    paymentStatus: selectedJob.paymentStatus,
+                                    escrowReference: selectedJob.escrowReference,
+                                });
+
+                                return (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {canCancel && (
+                                            <button
+                                                type="button"
+                                                disabled={isActionBusy}
+                                                onClick={() => handleCancelSelectedJob(selectedJob)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                title="Cancel this job while keeping the audit log"
+                                            >
+                                                <Ban className="w-3.5 h-3.5" />
+                                                Cancel Request
+                                            </button>
+                                        )}
+                                        {deleteCheck.allowed ? (
+                                            <button
+                                                type="button"
+                                                disabled={isActionBusy}
+                                                onClick={() => handleDeleteSelectedJob(selectedJob)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                title="Permanently delete this test/cancelled/unassigned request"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Delete Request
+                                            </button>
+                                        ) : (
+                                            <span
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-500 text-xs font-semibold cursor-not-allowed"
+                                                title={deleteCheck.reason}
+                                            >
+                                                <Lock className="w-3.5 h-3.5" />
+                                                Delete Locked (Audit / Escrow Protected)
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                             <button onClick={closeModal} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-100 transition-colors">
                                 Close
                             </button>
@@ -785,6 +1113,15 @@ export default function AdminServiceRequestsPage() {
                     </div>
                 </div>
             )}
+
+            <AssignAssistantModal
+                isOpen={isAdminDispatchOpen && Boolean(selectedJob)}
+                job={selectedJob}
+                hodUid={selectedJob?.hodId || selectedJob?.providerId || auth.currentUser?.uid || "admin"}
+                hodName={selectedJob?.hodName || "Admin Dispatch"}
+                directoryAssistants={directoryAssistants}
+                onClose={() => setIsAdminDispatchOpen(false)}
+            />
         </div>
     );
 }

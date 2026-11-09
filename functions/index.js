@@ -53,7 +53,19 @@ exports.initializePayment = onCall({ secrets: [PAYSTACK_SECRET_KEY] }, async (re
     throw new HttpsError("failed-precondition", "Job already paid");
   }
 
-  const amountNaira = Number(job.data.budget ?? job.data.price);
+  // Enforce: Client cannot make any payment until the client approves that the job is well done
+  const isApprovedByClient =
+    job.data.clientApproved === true ||
+    job.data.status === "fully_completed" ||
+    job.data.status === "completed";
+  if (!isApprovedByClient) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Payment is locked until you inspect and approve that the job is well done."
+    );
+  }
+
+  const amountNaira = Number(job.data.finalAgreedPrice ?? job.data.budget ?? job.data.price);
   if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
     throw new HttpsError("failed-precondition", "Job has no valid price");
   }

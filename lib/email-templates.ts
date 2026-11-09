@@ -813,5 +813,253 @@ Web: ${baseUrl}
 `;
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 7. STATE HOD APPOINTMENT EMAIL (SENT WHEN APPOINTED AS STATE HOD)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const hodAppointmentEmailTemplate = (params: {
+  name: string;
+  categoryName: string;
+  stateName: string;
+}) => {
+  const baseUrl = getAppBaseUrl();
+  const { name, categoryName, stateName } = params;
+
+  const content = `
+    <p style="font-size: 16px; color: #0F172A; margin: 0 0 16px 0;">Hello <strong>${name || 'Service Partner'}</strong>,</p>
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+      Congratulations! You have been officially appointed as the <strong>State Head of Department (HOD)</strong> for <strong>${categoryName}</strong> in <strong>${stateName}</strong> on <strong>Wheel of Comfort</strong>.
+    </p>
+
+    <!-- Appointment Card -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAF5FF; border: 1px solid #E9D5FF; border-left: 4px solid #7C3AED; border-radius: 10px; margin: 22px 0; padding: 18px;">
+      <tr>
+        <td>
+          <div style="font-size: 12px; font-weight: 800; color: #6D28D9; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">
+            👑 Official HOD Department Assignment
+          </div>
+          <div style="font-size: 16px; font-weight: 800; color: #1E1B4B; margin-bottom: 4px;">
+            ${categoryName} — ${stateName}
+          </div>
+          <div style="font-size: 13px; color: #4C1D95; line-height: 1.5;">
+            Under our <strong>1 Request = 1 Category + 1 Location = 1 HOD</strong> smart-routing rule, every client request for <strong>${categoryName}</strong> in <strong>${stateName}</strong> will now route directly and exclusively to your Provider Dashboard.
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Responsibilities Card -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; margin: 20px 0; padding: 18px;">
+      <tr>
+        <td>
+          <div style="font-size: 13px; font-weight: 700; color: #0F172A; margin-bottom: 12px;">
+            How your HOD Dispatch Desk works:
+          </div>
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td width="28" valign="top" style="font-size: 16px;">1️⃣</td>
+              <td style="font-size: 13px; color: #334155; line-height: 1.5;">
+                <strong style="color: #0F172A;">Exclusive State Routing:</strong> When a client in <strong>${stateName}</strong> requests <strong>${categoryName}</strong>, you receive an instant email &amp; dashboard notification.
+              </td>
+            </tr>
+            <tr><td height="10"></td></tr>
+            <tr>
+              <td width="28" valign="top" style="font-size: 16px;">2️⃣</td>
+              <td style="font-size: 13px; color: #334155; line-height: 1.5;">
+                <strong style="color: #0F172A;">Dispatch Nearest Assistant:</strong> Open the job on your dashboard and click <strong>"Dispatch Nearest Assistant"</strong> to assign your closest field technician to the client's address.
+              </td>
+            </tr>
+            <tr><td height="10"></td></tr>
+            <tr>
+              <td width="28" valign="top" style="font-size: 16px;">3️⃣</td>
+              <td style="font-size: 13px; color: #334155; line-height: 1.5;">
+                <strong style="color: #0F172A;">Quality Oversight &amp; Completion:</strong> Track the inspection, quote, and completion status directly from your Provider Dashboard or Mobile App.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 28px 0 16px 0;">
+      <tr>
+        <td align="center">
+          <a href="${baseUrl}/dashboard/provider" style="display: inline-block; background: linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%); color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 14px; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);">
+            Open Your HOD Dashboard &rarr;
+          </a>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  return emailWrapper({
+    title: 'Appointed as State HOD 👑',
+    previewText: `Congratulations ${name}! You have been appointed as the ${stateName} State HOD for ${categoryName}.`,
+    subtitle: `${categoryName} • ${stateName}`,
+    badgeText: 'State Head of Department',
+    badgeColor: 'green',
+    bodyContent: content,
+  });
+};
+
+export const hodAppointmentEmailText = (params: {
+  name: string;
+  categoryName: string;
+  stateName: string;
+}) => {
+  const baseUrl = getAppBaseUrl();
+  const { name, categoryName, stateName } = params;
+  return `
+Wheel of Comfort - Official State HOD Appointment
+
+Hello ${name || 'Service Partner'},
+
+Congratulations! You have been officially appointed as the State Head of Department (HOD) for ${categoryName} in ${stateName}.
+
+Department: ${categoryName} — ${stateName}
+Routing Rule: 1 Request = 1 Category + 1 Location = 1 HOD
+
+How your HOD Dispatch Desk works:
+1. Exclusive State Routing: Every client request for ${categoryName} in ${stateName} routes directly to your Provider Dashboard.
+2. Dispatch Nearest Assistant: Click "Dispatch Nearest Assistant" on any incoming request to assign the closest field technician under you to the client's location.
+3. Quality Oversight: Track job progress and completion from your Web or Mobile Provider Dashboard.
+
+Open your HOD Dashboard:
+${baseUrl}/dashboard/provider
+
+Support: wheelofcomfort@gmail.com
+Web: ${baseUrl}
+
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
+`;
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 8. HOD NEW SERVICE REQUEST DISPATCH EMAIL (SENT WHEN A JOB ROUTES TO HOD)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const hodJobDispatchEmailTemplate = (params: {
+  hodName: string;
+  categoryName: string;
+  stateName: string;
+  clientName: string;
+  location: string;
+  description: string;
+  preferredTime?: string;
+}) => {
+  const baseUrl = getAppBaseUrl();
+  const {
+    hodName,
+    categoryName,
+    stateName,
+    clientName,
+    location,
+    description,
+    preferredTime,
+  } = params;
+
+  const content = `
+    <p style="font-size: 16px; color: #0F172A; margin: 0 0 16px 0;">Hello <strong>${hodName || 'State HOD'}</strong>,</p>
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+      A new <strong>${categoryName}</strong> service request in <strong>${stateName}</strong> has been smart-routed directly to your HOD Dispatch Desk. Please review the details below and dispatch your nearest field assistant/technician.
+    </p>
+
+    <!-- Job Summary Card -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 10px; margin: 22px 0; padding: 18px;">
+      <tr>
+        <td>
+          <div style="font-size: 12px; font-weight: 800; color: #0284C7; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;">
+            🛠️ Incoming HOD Department Request (${categoryName} • ${stateName})
+          </div>
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td style="font-size: 13px; color: #64748B; padding: 4px 0; width: 130px;"><strong>Client Name:</strong></td>
+              <td style="font-size: 13px; color: #0F172A; font-weight: 700; padding: 4px 0;">${clientName || 'Verified Client'}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; color: #64748B; padding: 4px 0;"><strong>Service Category:</strong></td>
+              <td style="font-size: 13px; color: #0F172A; font-weight: 700; padding: 4px 0;">${categoryName}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; color: #64748B; padding: 4px 0;"><strong>Client Location:</strong></td>
+              <td style="font-size: 13px; color: #0F172A; font-weight: 700; padding: 4px 0;">${location}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; color: #64748B; padding: 4px 0;"><strong>Preferred Time:</strong></td>
+              <td style="font-size: 13px; color: #334155; padding: 4px 0;">${preferredTime || 'As soon as possible'}</td>
+            </tr>
+            <tr>
+              <td valign="top" style="font-size: 13px; color: #64748B; padding: 6px 0 0 0;"><strong>Issue Details:</strong></td>
+              <td style="font-size: 13px; color: #334155; line-height: 1.5; padding: 6px 0 0 0;">${description}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 28px 0 16px 0;">
+      <tr>
+        <td align="center">
+          <a href="${baseUrl}/dashboard/provider/jobs" style="display: inline-block; background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 14px; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 10px rgba(2, 132, 199, 0.3);">
+            Review &amp; Dispatch Nearest Assistant &rarr;
+          </a>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  return emailWrapper({
+    title: `New ${categoryName} Request (${stateName})`,
+    previewText: `New ${categoryName} request from ${clientName} at ${location}. Dispatch your nearest assistant.`,
+    subtitle: 'Awaiting HOD Assistant Dispatch',
+    badgeText: 'HOD Smart-Routing Alert',
+    badgeColor: 'blue',
+    bodyContent: content,
+  });
+};
+
+export const hodJobDispatchEmailText = (params: {
+  hodName: string;
+  categoryName: string;
+  stateName: string;
+  clientName: string;
+  location: string;
+  description: string;
+  preferredTime?: string;
+}) => {
+  const baseUrl = getAppBaseUrl();
+  const {
+    hodName,
+    categoryName,
+    stateName,
+    clientName,
+    location,
+    description,
+    preferredTime,
+  } = params;
+  return `
+Wheel of Comfort - New ${categoryName} Request (${stateName})
+
+Hello ${hodName || 'State HOD'},
+
+A new ${categoryName} request in ${stateName} has been routed directly to you as the State Head of Department (HOD).
+
+Client Name: ${clientName || 'Verified Client'}
+Service Category: ${categoryName}
+Client Location: ${location}
+Preferred Time: ${preferredTime || 'As soon as possible'}
+Issue Details: ${description}
+
+Please log in to your HOD Dashboard to review and dispatch your nearest field assistant:
+${baseUrl}/dashboard/provider/jobs
+
+Support: wheelofcomfort@gmail.com
+Web: ${baseUrl}
+
+© ${new Date().getFullYear()} Wheel of Comfort & Multipurpose Services. All rights reserved.
+`;
+};
+
+
 
 

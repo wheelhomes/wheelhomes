@@ -69,21 +69,15 @@ service cloud.firestore {
     function canUpdateJob(data) {
       return isSignedIn() && (
         isAdmin() ||
-        // Client may update their own job details but cannot re-parent or alter escrow status
+        // Client may update their own job details (including clientApproved) but cannot alter escrow status
         (isJobOwner(data) && jobIdentityLocked()) ||
-        // Assigned provider: cannot re-assign, re-price, or touch payment/escrow fields
-        (data.get('providerId', '') == request.auth.uid &&
-          noneChanged([
-            'clientId', 'userId', 'createdAt', 'providerId',
-            'price', 'budget',
-            'paymentStatus', 'escrowReference', 'escrowAmount',
-            'escrowTransactionId', 'escrowSecuredAt', 'paymentReleasedAt'
-          ])) ||
-        // Approved provider claiming an open/pending job for THEMSELVES only
+        // Assigned provider or designated State HOD: can dispatch assistants, update progress, and submit final bill
+        ((data.get('providerId', '') == request.auth.uid || data.get('hodId', '') == request.auth.uid) &&
+          jobIdentityLocked()) ||
+        // Approved provider / HOD claiming or dispatching an assistant on an open/pending job
         (data.get('status', '') in ['open', 'pending'] &&
           isApprovedProvider() &&
-          onlyChanged(['status', 'providerId', 'acceptedAt', 'assignedAt', 'updatedAt',
-                       'providerName', 'providerPhone', 'providerPhoto']) &&
+          jobIdentityLocked() &&
           request.resource.data.get('providerId', '') == request.auth.uid &&
           request.resource.data.get('status', '') == 'accepted')
       );
@@ -182,7 +176,9 @@ service cloud.firestore {
     match /job_requests/{requestId} {
       allow read: if isSignedIn() && (
         resource.data.get('clientId', '') == request.auth.uid ||
+        resource.data.get('userId', '') == request.auth.uid ||
         resource.data.get('providerId', '') == request.auth.uid ||
+        resource.data.get('hodId', '') == request.auth.uid ||
         resource.data.get('status', '') in ['pending', 'open'] ||
         (resource.data.get('invitedProviderIds', []) is list &&
          resource.data.get('invitedProviderIds', []).hasAny([request.auth.uid])) ||
@@ -190,7 +186,8 @@ service cloud.firestore {
       );
 
       allow create: if isSignedIn()
-                    && request.resource.data.clientId == request.auth.uid
+                    && (request.resource.data.get('clientId', '') == request.auth.uid ||
+                        request.resource.data.get('userId', '') == request.auth.uid)
                     && request.resource.data.get('paymentStatus', 'unpaid') == 'unpaid';
 
       allow update: if canUpdateJob(resource.data);
@@ -198,9 +195,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read, create: if isSignedIn() && (
+        allow read, create, update: if isSignedIn() && (
           get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('clientId', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('userId', '') == request.auth.uid ||
           get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('providerId', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('hodId', '') == request.auth.uid ||
+          (get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('invitedProviderIds', []) is list &&
+           get(/databases/$(database)/documents/job_requests/$(requestId)).data.get('invitedProviderIds', []).hasAny([request.auth.uid])) ||
           isAdmin()
         );
       }
@@ -250,11 +251,13 @@ service cloud.firestore {
     // USERS
     // ------------------------------------------------------------------
     match /users/{userId} {
-      // Own profile, admins, or provider profiles (needed for marketplace)
-      allow read: if isSignedIn() && (
-        request.auth.uid == userId ||
-        isAdmin() ||
-        resource.data.get('role', '') == 'service_provider'
+      // Own profile, admins, approved providers discovering signed-up providers, or clients discovering approved providers
+      allow read: if (resource.data.get('role', '') == 'service_provider' &&
+                      (resource.data.get('status', '') == 'approved' || isApprovedProvider())) || (
+        isSignedIn() && (
+          request.auth.uid == userId ||
+          isAdmin()
+        )
       );
 
       // Create: own profile only; cannot grant admin or self-approve, cannot forge emailVerified
@@ -296,6 +299,50 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
       allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // PROPERTIES (Real Estate Listings by Verified Users / Agents)
+    // ------------------------------------------------------------------
+    match /properties/{propertyId} {
+      // Publicly viewable by all users, prospective clients, and web visitors
+      allow read: if true;
+
+      // Created by authenticated users (agents, property owners, or admins)
+      allow create: if isSignedIn();
+
+      // Updated or deleted by listing author / agent or admin
+      allow update, delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.get('agentId', '') == request.auth.uid ||
+        resource.data.get('userId', '') == request.auth.uid
+      );
+    }
+
+    // ------------------------------------------------------------------
+    // ONLINE VOICE CALLS (WebRTC signaling between Client <-> HOD/Provider)
+    // ------------------------------------------------------------------
+    match /calls/{callId} {
+      allow read: if isSignedIn() && (
+        resource.data.get('callerId', '') == request.auth.uid ||
+        resource.data.get('calleeId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn()
+                    && request.resource.data.callerId == request.auth.uid
+                    && request.resource.data.calleeId is string;
+      allow update: if isSignedIn() && (
+        resource.data.get('callerId', '') == request.auth.uid ||
+        resource.data.get('calleeId', '') == request.auth.uid
+      ) && noneChanged(['callerId', 'calleeId']);
+      allow delete: if isAdmin();
+
+      match /{candidateCol}/{candidateId} {
+        allow read, write: if isSignedIn() && (
+          get(/databases/$(database)/documents/calls/$(callId)).data.get('callerId', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/calls/$(callId)).data.get('calleeId', '') == request.auth.uid
+        );
+      }
     }
 
     // ------------------------------------------------------------------

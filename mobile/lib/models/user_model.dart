@@ -30,24 +30,64 @@ class UserProfile {
   });
 
   factory UserProfile.fromMap(Map<String, dynamic> map, String id) {
+    final appData = map['applicationData'] is Map
+        ? Map<String, dynamic>.from(map['applicationData'])
+        : null;
+
+    Map<String, dynamic>? parsedAddress;
+    if (map['address'] is Map) {
+      parsedAddress = Map<String, dynamic>.from(map['address']);
+    } else if (map['address'] is String && (map['address'] as String).trim().isNotEmpty) {
+      parsedAddress = {'address': (map['address'] as String).trim()};
+    }
+
+    final rawName = (map['fullName'] ??
+            map['displayName'] ??
+            map['name'] ??
+            appData?['fullName'] ??
+            map['businessName'] ??
+            '')
+        .toString()
+        .trim();
+
+    final rawPhone = (map['phone'] ??
+            map['phoneNumber'] ??
+            appData?['phone'] ??
+            appData?['phoneNumber'] ??
+            '')
+        .toString()
+        .trim();
+
+    final rawRole = (map['role'] ?? appData?['role'] ?? 'pending_role_selection')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final rawStatus = (map['status'] ?? 'unverified')
+        .toString()
+        .trim()
+        .toLowerCase();
+
     return UserProfile(
       uid: id,
-      email: map['email'] ?? '',
-      fullName: map['fullName'] ?? '',
-      phone: map['phone'] ?? '',
-      businessName: map['businessName'],
-      role: map['role'] ?? 'pending_role_selection',
-      status: map['status'] ?? 'unverified',
-      rejectionReason: map['rejectionReason'] as String?,
+      email: (map['email'] ?? appData?['email'] ?? '').toString().trim(),
+      fullName: rawName,
+      phone: rawPhone,
+      businessName: map['businessName']?.toString() ?? appData?['businessName']?.toString(),
+      role: rawRole,
+      status: rawStatus,
+      rejectionReason: map['rejectionReason']?.toString(),
       emailVerified: map['emailVerified'] == true ||
-          map['status'] == 'verified' ||
-          map['status'] == 'pending_review' ||
-          map['status'] == 'approved' ||
-          (map['role'] != null && map['role'] != 'pending_role_selection' && map['verificationOtp'] == null),
-      address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
-      applicationData: map['applicationData'] != null ? Map<String, dynamic>.from(map['applicationData']) : null,
+          rawStatus == 'verified' ||
+          rawStatus == 'pending_review' ||
+          rawStatus == 'approved' ||
+          (rawRole.isNotEmpty && rawRole != 'pending_role_selection' && map['verificationOtp'] == null),
+      address: parsedAddress,
+      applicationData: appData,
       rawData: map,
-      createdAt: map['createdAt'] ?? DateTime.now().toIso8601String(),
+      createdAt: map['createdAt'] != null
+          ? map['createdAt'].toString()
+          : DateTime.now().toIso8601String(),
     );
   }
 
@@ -85,19 +125,109 @@ class UserProfile {
   bool get isServiceProvider => role == 'service_provider';
   bool get isAgent => role == 'agent';
 
-  // Resilient fallback getters (ensures 100% parity with web registration and admin console)
-  String? get govIdUrl => (applicationData?['govIdUrl'] ?? rawData['govIdUrl'] ?? applicationData?['govIdPhoto'] ?? rawData['govIdPhoto']) as String?;
-  String? get passportUrl => (applicationData?['passportUrl'] ?? rawData['passportUrl'] ?? applicationData?['passportPhoto'] ?? rawData['passportPhoto']) as String?;
-  String? get idType => (applicationData?['idType'] ?? rawData['idType']) as String?;
-  String? get bio => (applicationData?['bio'] ?? rawData['bio'] ?? applicationData?['description'] ?? rawData['description']) as String?;
-  String? get serviceCategory => (applicationData?['serviceCategory'] ?? rawData['serviceCategory'] ?? applicationData?['primaryService'] ?? rawData['primaryService'] ?? rawData['category']) as String?;
-  String? get experience => (applicationData?['experience'] ?? rawData['experience'])?.toString();
-  String? get coverageArea => (applicationData?['coverageArea'] ?? rawData['coverageArea'] ?? rawData['city']) as String?;
+  // Resilient getters: Top-level updated fields (`rawData` & `hodDepartments`) take priority
+  // over initial onboarding snapshot (`applicationData`) so Admin & Provider updates show immediately.
+  static String? _firstNonEmpty(List<dynamic> candidates) {
+    for (final c in candidates) {
+      if (c != null) {
+        final s = c.toString().trim();
+        if (s.isNotEmpty) return s;
+      }
+    }
+    return null;
+  }
+
+  String? get govIdUrl => _firstNonEmpty([
+        rawData['govIdUrl'],
+        rawData['govIdPhoto'],
+        applicationData?['govIdUrl'],
+        applicationData?['govIdPhoto'],
+      ]);
+
+  String? get passportUrl => _firstNonEmpty([
+        rawData['passportUrl'],
+        rawData['passportPhoto'],
+        rawData['photoURL'],
+        rawData['photoUrl'],
+        rawData['avatarUrl'],
+        rawData['avatar'],
+        applicationData?['passportUrl'],
+        applicationData?['passportPhoto'],
+      ]);
+
+  String? get idType => _firstNonEmpty([
+        rawData['idType'],
+        applicationData?['idType'],
+      ]);
+
+  String? get bio => _firstNonEmpty([
+        rawData['bio'],
+        rawData['description'],
+        applicationData?['bio'],
+        applicationData?['description'],
+      ]);
+
+  String? get serviceCategory {
+    String? hodCat;
+    final hodDepts = rawData['hodDepartments'];
+    if (hodDepts is List && hodDepts.isNotEmpty && hodDepts.first is Map) {
+      hodCat = (hodDepts.first as Map)['categoryName']?.toString();
+    }
+    final topServices = rawData['services'] is List && (rawData['services'] as List).isNotEmpty
+        ? (rawData['services'] as List).first
+        : null;
+    final appServices = applicationData?['services'] is List && (applicationData!['services'] as List).isNotEmpty
+        ? (applicationData!['services'] as List).first
+        : null;
+
+    return _firstNonEmpty([
+      rawData['serviceCategory'],
+      hodCat,
+      rawData['tradeCategory'],
+      rawData['primaryService'],
+      topServices,
+      rawData['category'],
+      rawData['profession'],
+      applicationData?['serviceCategory'],
+      applicationData?['primaryService'],
+      appServices,
+    ]);
+  }
+
+  String? get experience => _firstNonEmpty([
+        rawData['experience'],
+        rawData['experienceYears'],
+        applicationData?['experience'],
+        applicationData?['experienceYears'],
+      ]);
+
+  String? get coverageArea {
+    String? hodState;
+    final hodDepts = rawData['hodDepartments'];
+    if (hodDepts is List && hodDepts.isNotEmpty && hodDepts.first is Map) {
+      hodState = (hodDepts.first as Map)['stateName']?.toString();
+    }
+    final locStr = rawData['location'] is String ? rawData['location'] : null;
+    return _firstNonEmpty([
+      rawData['coverageArea'],
+      rawData['state'],
+      hodState,
+      rawData['city'],
+      address?['state'],
+      address?['city'],
+      address?['address'],
+      locStr,
+      applicationData?['coverageArea'],
+      applicationData?['state'],
+      applicationData?['city'],
+      applicationData?['location'],
+    ]);
+  }
 
   List<String> get jobPhotos {
-    final list = applicationData?['jobPhotos'] ?? rawData['jobPhotos'] ?? rawData['workPhotos'];
+    final list = rawData['jobPhotos'] ?? rawData['workPhotos'] ?? applicationData?['jobPhotos'];
     if (list is List) {
-      return list.map((e) => e.toString()).toList();
+      return list.map((e) => e.toString()).where((s) => s.trim().isNotEmpty).toList();
     }
     return [];
   }

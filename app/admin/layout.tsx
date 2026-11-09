@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, LogOut, Shield, FileText, Users, Building2, CreditCard, Sparkles } from "lucide-react";
+import { LayoutDashboard, LogOut, Shield, FileText, Users, Building2, CreditCard, Sparkles, Wrench } from "lucide-react";
 
 export default function AdminLayout({
     children,
@@ -101,6 +101,7 @@ export default function AdminLayout({
         { name: "Overview", icon: LayoutDashboard, href: "/admin/dashboard" },
         { name: "User Management", icon: Users, href: "/admin/users" },
         { name: "Provider Approvals", icon: Shield, href: "/admin/approvals" },
+        { name: "Service Types", icon: Wrench, href: "/admin/services" },
         { name: "Properties", icon: Building2, href: "/admin/properties" },
         { name: "Service Requests", icon: FileText, href: "/admin/requests" },
         { name: "Transactions & Escrow", icon: CreditCard, href: "/admin/transactions" },

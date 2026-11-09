@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Calendar, MapPin, Clock, DollarSign, MessageCircle, User } from "lucide-react";
 import { StatusBadge, RequestStatus } from "./StatusBadge";
+import { formatRequestCode } from "@/lib/job-utils";
 
 export interface TimelineEvent {
     id: string;
@@ -80,8 +81,8 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request }) => {
                         <span className="text-xl">{getCategoryIcon(request.category)}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium text-gray-400 mb-1 block">
-                            #{request.id} • {request.category}
+                        <span className="text-xs font-mono font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded mb-1 inline-block">
+                            #{formatRequestCode(request)} • {request.category}
                         </span>
                         <h3 className="text-lg font-semibold text-gray-900 group-hover:text-orange-600 transition-colors line-clamp-2">
                             {request.title}

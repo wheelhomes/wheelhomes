@@ -31,10 +31,20 @@ class AuthProvider with ChangeNotifier {
       _user = user;
       _profileSubscription?.cancel();
       if (user != null) {
-        _profileSubscription = _authService.userProfileStream(user.uid).listen((profile) {
-          _userProfile = profile;
-          notifyListeners();
-        });
+        notifyListeners();
+        fetchProfile(user.uid);
+        _profileSubscription = _authService.userProfileStream(user.uid).listen(
+          (profile) {
+            if (profile != null) {
+              _userProfile = profile;
+              notifyListeners();
+            }
+          },
+          onError: (e) {
+            debugPrint('[AuthProvider] Profile stream error: $e');
+            notifyListeners();
+          },
+        );
       } else {
         _userProfile = null;
         notifyListeners();

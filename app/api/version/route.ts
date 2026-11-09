@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
 
 // Current web application version and build stamp
-const APP_VERSION = "1.0.1";
-const BUILD_TIMESTAMP = 1729519200000;
+const APP_VERSION = "1.1.0";
+const BUILD_TIMESTAMP = 1794234880000;
 
 export async function GET() {
     return NextResponse.json({
         success: true,
         version: APP_VERSION,
         buildTime: BUILD_TIMESTAMP,
-        releaseNotes: "Streamlined user roles (Clients, Service Providers, and Real Estate Agents), property listing tools, and performance enhancements.",
+        releaseNotes: "Online WhatsApp-style voice calling, real-time notifications, HOD department routing, field assistant dispatch, and escrow completion workflow.",
         mobile: {
-            latestVersion: "1.0.0",
-            latestBuildNumber: 1,
+            latestVersion: "1.1.0",
+            latestBuildNumber: 2,
             minRequiredVersion: "1.0.0",
-            downloadUrl: "https://wheelhomes.com/downloads/wheelofcomfort.apk",
-            releaseNotes: "Streamlined user roles (Clients, Service Providers, and Real Estate Agents), performance enhancements, and direct job dispatches.",
+            downloadUrl: "https://wheelofcomfort.vercel.app/downloads/wheelofcomfort.apk",
+            releaseNotes: "Online WhatsApp-style voice calling, real-time Android system notifications, HOD department routing, and field assistant dispatch.",
             forceUpdate: false
         }
     }, {

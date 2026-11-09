@@ -8,9 +8,11 @@ import {
     CheckCheck,
     MessageSquare,
     Briefcase,
+    ShieldCheck,
     Loader2
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
+import { formatNotificationTime } from "@/lib/notifications";
 import {
     collection,
     query,
@@ -26,12 +28,17 @@ import Link from "next/link";
 interface NotificationItem {
     id: string;
     title: string;
-    message: string;
+    message?: string;
+    body?: string;
     type?: string;
     read?: boolean;
+    isRead?: boolean;
     createdAt?: any;
     requestId?: string;
     jobId?: string;
+    link?: string;
+    recipientId?: string;
+    payload?: Record<string, any>;
 }
 
 export default function NotificationsPage() {
@@ -40,7 +47,7 @@ export default function NotificationsPage() {
     const [userRole, setUserRole] = useState<string>("user");
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [filter, setFilter] = useState<"all" | "unread">("all");
+    const [filter, setFilter] = useState<"all" | "unread" | "job" | "chat" | "escrow">("all");
 
     useEffect(() => {
         const unsubscribeAuth = auth.onAuthStateChanged(async (currentUser) => {
@@ -105,10 +112,35 @@ export default function NotificationsPage() {
         return () => unsubscribeAuth();
     }, [router]);
 
+    const isItemRead = (n: NotificationItem) => Boolean(n.read || n.isRead);
+
+    const classifyNotif = (n: NotificationItem): "chat" | "escrow" | "job" | "system" => {
+        const lower = String(n.title || "").toLowerCase();
+        if (n.type === "chat" || n.type === "chat_message" || lower.includes("message") || lower.includes("chat")) {
+            return "chat";
+        }
+        if (n.type === "escrow" || lower.includes("escrow") || lower.includes("payment") || lower.includes("paid")) {
+            return "escrow";
+        }
+        if (
+            n.type === "job_update" ||
+            lower.includes("job") ||
+            lower.includes("dispatch") ||
+            lower.includes("hod") ||
+            lower.includes("assistant") ||
+            lower.includes("request") ||
+            lower.includes("completed")
+        ) {
+            return "job";
+        }
+        return "system";
+    };
+
     const handleMarkAsRead = async (notifId: string) => {
         try {
             await updateDoc(doc(db, "notifications", notifId), {
                 read: true,
+                isRead: true,
             });
         } catch (e) {
             console.error("Failed to mark notification read", e);
@@ -116,11 +148,12 @@ export default function NotificationsPage() {
     };
 
     const handleMarkAllAsRead = async () => {
-        const unreadItems = notifications.filter(n => !n.read);
+        const unreadItems = notifications.filter(n => !isItemRead(n) && n.recipientId !== "all");
         for (const item of unreadItems) {
             try {
                 await updateDoc(doc(db, "notifications", item.id), {
                     read: true,
+                    isRead: true,
                 });
             } catch (_) {}
         }
@@ -128,8 +161,14 @@ export default function NotificationsPage() {
 
     const dashboardHome = userRole === "service_provider" ? "/dashboard/provider" : "/dashboard/user";
 
-    const filtered = filter === "all" ? notifications : notifications.filter(n => !n.read);
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const filtered = notifications.filter((n) => {
+        if (filter === "unread") return !isItemRead(n);
+        if (filter === "chat") return classifyNotif(n) === "chat";
+        if (filter === "job") return classifyNotif(n) === "job";
+        if (filter === "escrow") return classifyNotif(n) === "escrow";
+        return true;
+    });
+    const unreadCount = notifications.filter(n => !isItemRead(n)).length;
 
     return (
         <div className="min-h-screen bg-gray-50/50 p-4 sm:p-8 font-sans">
@@ -174,29 +213,27 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setFilter("all")}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            filter === "all"
-                                ? "bg-gray-900 text-white shadow-xs"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                        }`}
-                    >
-                        All ({notifications.length})
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setFilter("unread")}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            filter === "unread"
-                                ? "bg-gray-900 text-white shadow-xs"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                        }`}
-                    >
-                        Unread ({unreadCount})
-                    </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                        { id: "all", label: `All (${notifications.length})` },
+                        { id: "unread", label: `Unread (${unreadCount})` },
+                        { id: "job", label: "Jobs 🛠️" },
+                        { id: "chat", label: "Chat 💬" },
+                        { id: "escrow", label: "Escrow 🔒" },
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setFilter(tab.id as any)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                filter === tab.id
+                                    ? "bg-gray-900 text-white shadow-xs"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Notification List */}
@@ -214,31 +251,55 @@ export default function NotificationsPage() {
                         </div>
                     ) : (
                         filtered.map((notif) => {
-                            const isJobAlert = notif.title.toLowerCase().includes("job") || notif.title.toLowerCase().includes("dispatch");
-                            const isChat = notif.title.toLowerCase().includes("message") || notif.title.toLowerCase().includes("chat");
-                            const dateStr = notif.createdAt?.seconds
-                                ? new Date(notif.createdAt.seconds * 1000).toLocaleString()
-                                : "Recent";
+                            const cat = classifyNotif(notif);
+                            const isUnread = !isItemRead(notif);
+                            const dateStr = formatNotificationTime(notif.createdAt);
+                            const jobId = notif.payload?.jobId || notif.jobId || notif.requestId;
 
                             return (
                                 <div
                                     key={notif.id}
-                                    onClick={() => !notif.read && handleMarkAsRead(notif.id)}
+                                    onClick={() => {
+                                        if (isUnread && notif.recipientId !== "all") {
+                                            handleMarkAsRead(notif.id);
+                                        }
+                                        const targetLink =
+                                            notif.link ||
+                                            notif.payload?.link ||
+                                            (cat === "chat"
+                                                ? userRole === "service_provider"
+                                                    ? "/dashboard/provider/messages"
+                                                    : jobId
+                                                        ? `/dashboard/my-requests/details?id=${jobId}`
+                                                        : "/dashboard/my-requests"
+                                                : jobId
+                                                    ? userRole === "service_provider"
+                                                        ? "/dashboard/provider/jobs"
+                                                        : `/dashboard/my-requests/details?id=${jobId}`
+                                                    : "");
+                                        if (targetLink) {
+                                            router.push(targetLink);
+                                        }
+                                    }}
                                     className={`p-5 transition-colors flex items-start gap-4 cursor-pointer hover:bg-gray-50/70 ${
-                                        !notif.read ? "bg-orange-50/40" : ""
+                                        isUnread ? "bg-orange-50/40" : ""
                                     }`}
                                 >
                                     <div className={`p-2.5 rounded-xl flex-shrink-0 ${
-                                        isJobAlert
+                                        cat === "job"
                                             ? "bg-blue-100 text-blue-700"
-                                            : isChat
-                                                ? "bg-indigo-100 text-indigo-700"
-                                                : "bg-emerald-100 text-emerald-700"
+                                            : cat === "chat"
+                                                ? "bg-orange-100 text-orange-700"
+                                                : cat === "escrow"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : "bg-purple-100 text-purple-700"
                                     }`}>
-                                        {isJobAlert ? (
+                                        {cat === "job" ? (
                                             <Briefcase className="w-5 h-5" />
-                                        ) : isChat ? (
+                                        ) : cat === "chat" ? (
                                             <MessageSquare className="w-5 h-5" />
+                                        ) : cat === "escrow" ? (
+                                            <ShieldCheck className="w-5 h-5" />
                                         ) : (
                                             <Bell className="w-5 h-5" />
                                         )}
@@ -246,7 +307,7 @@ export default function NotificationsPage() {
 
                                     <div className="flex-1 min-w-0 space-y-1">
                                         <div className="flex items-center justify-between gap-2">
-                                            <h3 className={`text-sm font-bold ${!notif.read ? "text-gray-950" : "text-gray-800"}`}>
+                                            <h3 className={`text-sm font-bold ${isUnread ? "text-gray-950" : "text-gray-800"}`}>
                                                 {notif.title}
                                             </h3>
                                             <span className="text-[11px] text-gray-400 whitespace-nowrap">
@@ -254,11 +315,11 @@ export default function NotificationsPage() {
                                             </span>
                                         </div>
                                         <p className="text-xs text-gray-600 leading-relaxed">
-                                            {notif.message}
+                                            {notif.message || notif.body}
                                         </p>
                                     </div>
 
-                                    {!notif.read && (
+                                    {isUnread && (
                                         <div className="w-2.5 h-2.5 rounded-full bg-orange-500 flex-shrink-0 mt-1.5" title="Unread" />
                                     )}
                                 </div>

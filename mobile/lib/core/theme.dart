@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Wheelhomes Design System Theme
 /// Built around the two official logo brand colors:
@@ -120,40 +119,40 @@ class AppTheme {
         surface: cardBg,
         onSurface: textPrimary,
       ),
-      textTheme: GoogleFonts.interTextTheme().copyWith(
-        headlineLarge: GoogleFonts.outfit(
+      textTheme: const TextTheme(
+        headlineLarge: TextStyle(
           fontSize: 28,
           fontWeight: FontWeight.bold,
           color: textPrimary,
           letterSpacing: -0.5,
         ),
-        headlineMedium: GoogleFonts.outfit(
+        headlineMedium: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.bold,
           color: textPrimary,
           letterSpacing: -0.3,
         ),
-        titleLarge: GoogleFonts.outfit(
+        titleLarge: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
-        titleMedium: GoogleFonts.inter(
+        titleMedium: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: TextStyle(
           fontSize: 16,
           color: textPrimary,
           height: 1.5,
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: TextStyle(
           fontSize: 14,
           color: textSecondary,
           height: 1.45,
         ),
-        bodySmall: GoogleFonts.inter(
+        bodySmall: TextStyle(
           fontSize: 12,
           color: textSecondary,
         ),
@@ -178,7 +177,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
@@ -192,7 +191,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
@@ -201,7 +200,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primary,
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),

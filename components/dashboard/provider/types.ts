@@ -16,6 +16,26 @@ export interface JobRequest {
     date?: string;
     time?: string;
 
+    // HOD Smart-Routing & Dispatched Assistant Fields
+    hodId?: string;
+    hodName?: string;
+    hodPhone?: string;
+    clientState?: string;
+    routingMode?: string;
+    assignedAssistant?: {
+        name: string;
+        phone: string;
+        area?: string;
+        linkedUserUid?: string | null;
+        dispatchedByHodUid?: string;
+        dispatchedByHodName?: string;
+        dispatchedAt?: string;
+        note?: string;
+    };
+    assistantName?: string;
+    assistantPhone?: string;
+    assistantArea?: string;
+
     // Completion Flow Fields
     startTime?: any;
     estimatedDuration?: string;

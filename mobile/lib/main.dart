@@ -10,8 +10,11 @@ import 'providers/auth_provider.dart';
 import 'providers/property_provider.dart';
 import 'providers/request_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/call_provider.dart';
 import 'providers/payment_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/service_provider_directory_provider.dart';
+import 'views/call/call_overlay.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/auth/signin_screen.dart';
 import 'views/auth/verify_email_screen.dart';
@@ -23,11 +26,11 @@ import 'views/verification/pending_approval_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Try initializing Firebase
+  // Try initializing Firebase with a safety timeout so emulator boot never hangs
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    );
+    ).timeout(const Duration(seconds: 8));
   } catch (e) {
     debugPrint('Firebase initialization warning: $e');
   }
@@ -46,13 +49,21 @@ class WheelhomesApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PropertyProvider()),
         ChangeNotifierProvider(create: (_) => RequestProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => CallProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ServiceProviderDirectoryProvider()),
       ],
       child: MaterialApp(
         title: 'Wheelhomes',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        builder: (context, child) => Stack(
+          children: [
+            if (child != null) child,
+            const CallOverlay(),
+          ],
+        ),
         home: const SplashScreen(),
       ),
     );
@@ -103,6 +114,18 @@ class AuthWrapper extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 28),
+                  if (authProvider.user != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: OutlinedButton.icon(
+                        onPressed: () => authProvider.fetchProfile(authProvider.user!.uid),
+                        icon: const Icon(LucideIcons.refreshCw, size: 15),
+                        label: const Text(
+                          'Retry Loading Profile',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
                   TextButton.icon(
                     onPressed: () => authProvider.signOut(),
                     icon: const Icon(LucideIcons.logOut, size: 16, color: AppTheme.error),

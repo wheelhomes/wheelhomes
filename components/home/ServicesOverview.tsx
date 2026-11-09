@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowRight, Wrench, Building2, Paintbrush, Hammer, Zap, Droplet } from "lucide-react";
+import { ArrowRight, Wrench, Building2 } from "lucide-react";
 import Container from "@/components/ui/Container";
+import { useServiceCategories, getLucideIcon } from "@/lib/service-categories";
 
 const ServicesOverview = () => {
+    const { activeCategories } = useServiceCategories();
     const realEstateServices = [
         { title: "Property Listing", desc: "Browse verified properties" },
         { title: "Land Acquisition", desc: "Buy & sell prime plots" },
@@ -10,14 +14,13 @@ const ServicesOverview = () => {
         { title: "Property Management", desc: "Full-service landlord solutions" },
     ];
 
-    const serviceCategories = [
-        { name: "Plumbing", icon: <Droplet className="w-5 h-5" /> },
-        { name: "Electrical", icon: <Zap className="w-5 h-5" /> },
-        { name: "Cleaning", icon: <Paintbrush className="w-5 h-5" /> },
-        { name: "Carpentry", icon: <Hammer className="w-5 h-5" /> },
-        { name: "Facility Mgmt", icon: <Building2 className="w-5 h-5" /> },
-        { name: "General Repairs", icon: <Wrench className="w-5 h-5" /> },
-    ];
+    const serviceCategories = activeCategories.slice(0, 6).map((cat) => {
+        const Icon = getLucideIcon(cat.iconKey);
+        return {
+            name: cat.shortTitle || cat.name,
+            icon: <Icon className="w-5 h-5" />,
+        };
+    });
 
     return (
         <section className="py-20 bg-white">

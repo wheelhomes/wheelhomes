@@ -1,6 +1,6 @@
 import { JobRequest } from "./types";
 import { Briefcase, MapPin, ChevronRight } from "lucide-react";
-import { formatJobLocation } from "@/lib/job-utils";
+import { formatJobLocation, formatRequestCode } from "@/lib/job-utils";
 
 // Helper for relative time (since date-fns is not installed)
 const timeAgo = (date: any) => {
@@ -27,7 +27,9 @@ export const JobListItem = ({ job, isSelected, onClick }: JobListItemProps) => {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'pending': return 'bg-yellow-500';
+            case 'pending':
+            case 'open':
+                return 'bg-yellow-500';
             case 'accepted': return 'bg-blue-500';
             case 'in_progress': return 'bg-purple-500 animate-pulse';
             case 'fully_completed': return 'bg-green-500';
@@ -63,18 +65,32 @@ export const JobListItem = ({ job, isSelected, onClick }: JobListItemProps) => {
 
             {/* Main Content */}
             <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-0.5">
-                    <h3 className={`text-sm font-bold truncate ${isSelected ? 'text-gray-900' : 'text-gray-800'}`}>
-                        {job.clientName || "Unknown Client"}
-                    </h3>
-                    <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
+                <div className="flex justify-between items-start mb-0.5 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className={`text-sm font-bold truncate ${isSelected ? 'text-gray-900' : 'text-gray-800'}`}>
+                            {job.clientName && job.clientName !== "Unknown Client" && job.clientName !== "Client"
+                                ? job.clientName
+                                : `Client #${(job.clientId || "").slice(0, 6).toUpperCase() || "NEW"}`}
+                        </h3>
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-mono font-bold shrink-0">
+                            #{formatRequestCode(job)}
+                        </span>
+                    </div>
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
                         {timeAgo(job.createdAt)}
                     </span>
                 </div>
 
-                <p className="text-xs font-medium text-blue-600 truncate mb-1">
-                    {job.serviceType}
-                </p>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs font-semibold text-blue-600 truncate">
+                        {job.serviceType}
+                    </p>
+                    {job.budget ? (
+                        <span className="text-xs font-bold text-emerald-700 shrink-0">
+                            ₦{job.budget.toLocaleString()}
+                        </span>
+                    ) : null}
+                </div>
 
                 <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span className="flex items-center gap-1 truncate max-w-[120px]">
@@ -83,7 +99,7 @@ export const JobListItem = ({ job, isSelected, onClick }: JobListItemProps) => {
                     </span>
                     <span className={`
                         px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
-                        ${job.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : ''}
+                        ${(job.status === 'pending' || (job.status as string) === 'open') ? 'bg-yellow-100 text-yellow-700' : ''}
                         ${job.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : ''}
                         ${job.status === 'accepted' ? 'bg-blue-100 text-blue-700' : ''}
                         ${job.status === 'fully_completed' ? 'bg-green-100 text-green-700' : ''}

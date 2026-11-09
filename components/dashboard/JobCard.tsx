@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Clock, MessageSquare } from "lucide-react";
+import { formatRequestCode } from "@/lib/job-utils";
 
 interface JobRequest {
     id: string;
@@ -25,7 +26,12 @@ export function JobCard({ job, onOpenChat, statusBadge }: JobCardProps) {
         <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 hover:border-orange-200 hover:shadow-md transition-all group cursor-pointer">
             <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-gray-900 mb-1 truncate">{job.serviceType}</h4>
+                    <div className="flex items-center gap-1.5 mb-1">
+                        <h4 className="font-bold text-gray-900 truncate">{job.serviceType}</h4>
+                        <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-mono font-bold shrink-0">
+                            #{formatRequestCode(job)}
+                        </span>
+                    </div>
                     <p className="text-xs text-gray-500 line-clamp-2">{job.description}</p>
                 </div>
                 <div className="ml-2 flex-shrink-0">
@@ -39,7 +45,7 @@ export function JobCard({ job, onOpenChat, statusBadge }: JobCardProps) {
             </div>
 
             <div className="flex gap-2">
-                {['pending', 'in_progress', 'accepted'].includes(job.status) && (
+                {['accepted', 'assigned', 'in_progress', 'awaiting_confirmation', 'partially_completed'].includes(job.status) && (
                     <button
                         onClick={() => onOpenChat(job)}
                         className="flex-1 flex items-center justify-center gap-2 text-xs font-medium bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"

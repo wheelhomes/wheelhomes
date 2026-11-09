@@ -59,6 +59,8 @@ function PropertyContent() {
                         agentName: data.agentName || NIGERIAN_PROPERTY_FALLBACK.agentName,
                         agentPhone: data.agentPhone || NIGERIAN_PROPERTY_FALLBACK.agentPhone,
                         description: data.description || NIGERIAN_PROPERTY_FALLBACK.description,
+                        image: data.image,
+                        images: data.images,
                     });
                 }
             } catch (err) {
@@ -84,7 +86,7 @@ function PropertyContent() {
                         status={property.status}
                     />
 
-                    <PropertyGallery />
+                    <PropertyGallery mainImage={property.image} images={property.images} />
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Main Content */}

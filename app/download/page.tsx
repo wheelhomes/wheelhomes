@@ -62,7 +62,7 @@ export default function DownloadPage() {
                             All-in-one real estate, verified artisan services & escrow management
                         </p>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300">
-                            <span className="font-semibold text-orange-400">v1.0.0</span>
+                            <span className="font-semibold text-orange-400">v1.1.0</span>
                             <span>•</span>
                             <span className="font-semibold text-emerald-400">21.8 MB (Optimized)</span>
                             <span>•</span>

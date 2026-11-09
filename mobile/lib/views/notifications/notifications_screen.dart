@@ -5,7 +5,9 @@ import '../../core/theme.dart';
 import '../../models/notification_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../providers/request_provider.dart';
 import '../chat/chat_screen.dart';
+import '../requests/request_detail_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -47,19 +49,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _handleNotificationTap(NotificationModel notif) {
     final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
+    final reqProvider = Provider.of<RequestProvider>(context, listen: false);
     if (!notif.isRead) {
       notifProvider.markAsRead(notif.id);
     }
 
-    if (notif.payload.containsKey('chatId') || notif.type == 'chat') {
+    final jobId = notif.jobId;
+    final allReqs = [
+      ...reqProvider.userRequests,
+      ...reqProvider.providerJobs,
+      ...reqProvider.openMarketJobs,
+    ];
+    final matchingReq = jobId != null
+        ? allReqs.where((r) => r.id == jobId).firstOrNull
+        : null;
+
+    if (notif.category == 'chat' || notif.payload.containsKey('chatId')) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ChatScreen(
-            title: notif.payload['title'] ?? 'Chat Conversation',
-            subtitle: notif.payload['subtitle'] ?? 'Direct Message',
-            jobId: notif.payload['jobId'],
+            title: matchingReq?.serviceType ??
+                notif.payload['title']?.toString() ??
+                'Chat Conversation',
+            subtitle: matchingReq?.location['address']?.toString() ??
+                notif.payload['subtitle']?.toString() ??
+                (notif.requestCode != null ? '#${notif.requestCode}' : 'Direct Message'),
+            jobId: jobId,
           ),
+        ),
+      );
+      return;
+    }
+
+    if (matchingReq != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RequestDetailScreen(request: matchingReq),
         ),
       );
     }
@@ -74,7 +101,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final allNotifs = notifProvider.notifications;
     final filtered = allNotifs.where((n) {
       if (_selectedFilter == 'unread') return !n.isRead;
-      if (_selectedFilter != 'all') return n.type == _selectedFilter;
+      if (_selectedFilter != 'all') return n.category == _selectedFilter;
       return true;
     }).toList();
 
@@ -198,7 +225,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     Color iconBg;
     Color iconColor;
 
-    switch (notif.type) {
+    switch (notif.category) {
       case 'escrow':
         icon = LucideIcons.shieldCheck;
         iconBg = const Color(0xFFECFDF5);
@@ -219,6 +246,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         iconBg = Colors.purple.withValues(alpha: 0.1);
         iconColor = Colors.purple;
     }
+
+    final reqCode = notif.requestCode;
 
     return InkWell(
       onTap: () => _handleNotificationTap(notif),
@@ -272,6 +301,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       ),
                     ],
                   ),
+                  if (reqCode != null && reqCode.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        reqCode.startsWith('#') ? reqCode : '#$reqCode',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     notif.body,
