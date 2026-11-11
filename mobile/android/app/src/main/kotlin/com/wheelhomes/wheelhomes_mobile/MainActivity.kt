@@ -57,6 +57,7 @@ class MainActivity : FlutterActivity() {
         try {
             startService(Intent(this, KeepAliveService::class.java))
         } catch (_: Exception) {}
+        PinLockHandler(this, flutterEngine.dartExecutor.binaryMessenger)
 
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel = channel
@@ -98,9 +99,11 @@ class MainActivity : FlutterActivity() {
                 "setSpeakerOn" -> {
                     val speakerOn = call.argument<Boolean>("speakerOn") ?: false
                     try {
-                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                        @Suppress("DEPRECATION")
-                        am.isSpeakerphoneOn = speakerOn
+                        if (!isRunningOnEmulator()) {
+                            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            @Suppress("DEPRECATION")
+                            am.isSpeakerphoneOn = speakerOn
+                        }
                         result.success(true)
                     } catch (_: Exception) {
                         result.success(false)

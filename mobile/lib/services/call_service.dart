@@ -173,9 +173,10 @@ class CallService {
   }
 
   Future<void> setSpeakerOn(bool on) async {
-    // Do not call Android AudioManager.isSpeakerphoneOn on the 16KB emulator,
-    // as it restarts media.audio_flinger. USAGE_MEDIA already outputs to speaker.
     _speakerMuted = false;
+    try {
+      await _channel.invokeMethod('setSpeakerOn', {'speakerOn': on});
+    } catch (_) {}
   }
 
   Future<void> dispose() async {

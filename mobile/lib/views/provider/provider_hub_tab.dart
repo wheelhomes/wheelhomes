@@ -11,6 +11,8 @@ import '../../providers/notification_provider.dart';
 import '../notifications/notifications_screen.dart';
 import '../verification/document_upload_screen.dart';
 import '../verification/pending_approval_screen.dart';
+import '../../providers/app_lock_provider.dart';
+import '../auth/pin_lock_screens.dart';
 import 'provider_earnings_screen.dart';
 import 'provider_ratings_screen.dart';
 import 'provider_portfolio_screen.dart';
@@ -429,6 +431,31 @@ class _ProviderProHubTabState extends State<ProviderProHubTab> {
                   Navigator.push(
                     ctx,
                     MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // 6. Security & Login PIN Tile
+            Consumer<AppLockProvider>(
+              builder: (ctx, appLock, _) => _buildActionCard(
+                ctx,
+                icon: LucideIcons.keyRound,
+                iconColor: AppTheme.accent,
+                iconBgColor: AppTheme.accent.withValues(alpha: 0.12),
+                title: 'Security & Login PIN',
+                subtitle: appLock.biometricEnabled
+                    ? '6-digit PIN + Biometric unlock active'
+                    : 'Change your 6-digit device Login PIN',
+                trailingBadge: 'ACTIVE',
+                trailingBadgeColor: AppTheme.accent,
+                onTap: () {
+                  Navigator.push(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => const PinSetupScreen(isChange: true),
+                    ),
                   );
                 },
               ),

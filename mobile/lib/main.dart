@@ -14,7 +14,9 @@ import 'providers/call_provider.dart';
 import 'providers/payment_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/service_provider_directory_provider.dart';
+import 'providers/app_lock_provider.dart';
 import 'views/call/call_overlay.dart';
+import 'views/auth/pin_lock_screens.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/auth/signin_screen.dart';
 import 'views/auth/verify_email_screen.dart';
@@ -53,6 +55,7 @@ class WheelhomesApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => ServiceProviderDirectoryProvider()),
+        ChangeNotifierProvider(create: (_) => AppLockProvider(), lazy: false),
       ],
       child: MaterialApp(
         title: 'Wheelhomes',
@@ -61,6 +64,8 @@ class WheelhomesApp extends StatelessWidget {
         builder: (context, child) => Stack(
           children: [
             if (child != null) child,
+            // PIN lock sits above every route; incoming calls still ring on top of it.
+            const AppLockOverlay(),
             const CallOverlay(),
           ],
         ),
@@ -80,6 +85,18 @@ class AuthWrapper extends StatelessWidget {
     // ── Step 1: Not logged in → Sign In
     if (!authProvider.isAuthenticated) {
       return const SignInScreen();
+    }
+
+    // ── Step 1.1: Wait until we know whether this device has a PIN, so the
+    // home screen never flashes before the lock screen on a restored session.
+    final appLock = Provider.of<AppLockProvider>(context);
+    if (!appLock.isReady) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+        ),
+      );
     }
 
     final profile = authProvider.userProfile;
@@ -151,6 +168,11 @@ class AuthWrapper extends StatelessWidget {
     // ── Step 2: No role picked yet → Role Selection
     if (profile.role == 'pending_role_selection') {
       return const RoleSelectionScreen();
+    }
+
+    // ── Step 2.5: First sign-in on this device → create a login PIN
+    if (!appLock.hasPin) {
+      return const PinSetupScreen();
     }
 
     // ── Step 3: Service Provider Verification Gating ──

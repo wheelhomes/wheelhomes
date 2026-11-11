@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
 
 // Current web application version and build stamp
-const APP_VERSION = "1.1.1";
-const BUILD_TIMESTAMP = 1794401460000;
+const APP_VERSION = "1.2.0";
+const BUILD_TIMESTAMP = 1794403320000;
 
 export async function GET() {
     return NextResponse.json({
         success: true,
         version: APP_VERSION,
         buildTime: BUILD_TIMESTAMP,
-        releaseNotes: "Online WhatsApp-style voice calling, real-time notifications, HOD department routing, field assistant dispatch, and escrow completion workflow.",
+        releaseNotes: "6-digit Login PIN & Biometric App Lock, online WhatsApp-style voice calling, real-time notifications, HOD department routing, and field assistant dispatch.",
         mobile: {
-            latestVersion: "1.1.1",
-            latestBuildNumber: 3,
+            latestVersion: "1.2.0",
+            latestBuildNumber: 4,
             minRequiredVersion: "1.0.0",
             downloadUrl: "https://wheelofcomfort.vercel.app/downloads/wheelofcomfort.apk",
-            releaseNotes: "Online WhatsApp-style voice calling, real-time Android system notifications, HOD department routing, and field assistant dispatch.",
+            releaseNotes: "New 6-digit Login PIN & Fingerprint/Face Biometric App Lock! Plus WhatsApp-style online voice calling and real-time notifications.",
             forceUpdate: false
         }
     }, {

@@ -31,7 +31,9 @@ import '../provider/provider_messages_tab.dart';
 import '../provider/provider_hub_tab.dart';
 import '../providers/verified_providers_screen.dart';
 import '../../providers/service_provider_directory_provider.dart';
+import '../../providers/app_lock_provider.dart';
 import '../../services/update_service.dart';
+import '../auth/pin_lock_screens.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -2357,6 +2359,49 @@ class _ProfileTab extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Security & Login PIN Tile
+          Consumer<AppLockProvider>(
+            builder: (ctx, appLock, _) => Material(
+              color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: AppTheme.border),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.keyRound, color: AppTheme.accent, size: 20),
+                ),
+                title: const Text(
+                  'Security & Login PIN',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  appLock.biometricEnabled
+                      ? '6-digit PIN + Biometric unlock active'
+                      : '6-digit device PIN active • Tap to change',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                trailing: const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textSecondary),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PinSetupScreen(isChange: true),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(height: 12),

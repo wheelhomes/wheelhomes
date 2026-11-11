@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/pin_lock_service.dart';
 import '../core/auth_error_helper.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -309,6 +310,9 @@ class AuthProvider with ChangeNotifier {
   Future<void> signOut() async {
     _profileSubscription?.cancel();
     _profileSubscription = null;
+    // Signing out removes this device's login PIN, so the next login must use
+    // email and password.
+    await PinLockService.clear();
     await _authService.signOut();
     _user = null;
     _userProfile = null;
