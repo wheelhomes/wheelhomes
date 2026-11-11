@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 // Current web application version and build stamp
-const APP_VERSION = "1.1.0";
-const BUILD_TIMESTAMP = 1794234880000;
+const APP_VERSION = "1.1.1";
+const BUILD_TIMESTAMP = 1794401460000;
 
 export async function GET() {
     return NextResponse.json({
@@ -11,8 +11,8 @@ export async function GET() {
         buildTime: BUILD_TIMESTAMP,
         releaseNotes: "Online WhatsApp-style voice calling, real-time notifications, HOD department routing, field assistant dispatch, and escrow completion workflow.",
         mobile: {
-            latestVersion: "1.1.0",
-            latestBuildNumber: 2,
+            latestVersion: "1.1.1",
+            latestBuildNumber: 3,
             minRequiredVersion: "1.0.0",
             downloadUrl: "https://wheelofcomfort.vercel.app/downloads/wheelofcomfort.apk",
             releaseNotes: "Online WhatsApp-style voice calling, real-time Android system notifications, HOD department routing, and field assistant dispatch.",

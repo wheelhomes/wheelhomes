@@ -37,8 +37,8 @@ class AppUpdateInfo {
 
 class UpdateService {
   // Current app version matching pubspec.yaml
-  static const String currentVersion = '1.1.0';
-  static const int currentBuildNumber = 2;
+  static const String currentVersion = '1.1.1';
+  static const int currentBuildNumber = 3;
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -200,12 +200,20 @@ class UpdateService {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         final uri = Uri.parse(updateInfo.downloadUrl);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        } else {
+                        try {
+                          final launched = await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                          if (!launched) {
+                            await launchUrl(uri, mode: LaunchMode.platformDefault);
+                          }
+                        } catch (_) {
                           if (ctx.mounted) {
                             ScaffoldMessenger.of(ctx).showSnackBar(
-                              const SnackBar(content: Text('Could not open download link.')),
+                              SnackBar(
+                                content: Text('Download at: ${updateInfo.downloadUrl}'),
+                              ),
                             );
                           }
                         }
