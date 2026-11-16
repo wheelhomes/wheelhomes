@@ -323,6 +323,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          /* In-app online voice call temporarily commented out
           if (widget.jobId != null)
             IconButton(
               tooltip: 'Online Voice Call',
@@ -359,6 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               },
             ),
+          */
           IconButton(
             tooltip: _soundMuted ? 'Unmute Chat Tune' : 'Mute Chat Tune',
             icon: Icon(

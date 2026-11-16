@@ -137,7 +137,7 @@ class _PadButton extends StatelessWidget {
 // Create / change PIN
 // ---------------------------------------------------------------------------
 
-enum _SetupStep { current, create, confirm, biometric }
+enum _SetupStep { current, create }
 
 class PinSetupScreen extends StatefulWidget {
   /// When true the user must enter their current PIN first (Profile -> Change PIN).
@@ -151,34 +151,23 @@ class PinSetupScreen extends StatefulWidget {
 class _PinSetupScreenState extends State<PinSetupScreen> {
   final _padKey = GlobalKey<PinPadState>();
   late _SetupStep _step = widget.isChange ? _SetupStep.current : _SetupStep.create;
-  String _firstPin = '';
   String? _error;
   bool _busy = false;
 
   String get _title => switch (_step) {
         _SetupStep.current => 'Enter current PIN',
-        _SetupStep.create => widget.isChange ? 'Choose a new PIN' : 'Create your login PIN',
-        _SetupStep.confirm => 'Confirm your PIN',
-        _SetupStep.biometric => 'Unlock faster',
+        _SetupStep.create => widget.isChange ? 'Enter your new 6-digit PIN' : 'Set your 6-digit Login PIN',
       };
 
   String get _subtitle => switch (_step) {
         _SetupStep.current => 'For your security, confirm your current PIN first.',
         _SetupStep.create =>
-          'Next time you open Wheelhomes, use this ${PinLockService.pinLength}-digit PIN instead of your password.',
-        _SetupStep.confirm => 'Enter the same PIN again.',
-        _SetupStep.biometric => 'Use your fingerprint or face to unlock Wheelhomes. Your PIN still works as a backup.',
+          'Every time you open Wheelhomes, you will log in with this ${PinLockService.pinLength}-digit PIN (or fingerprint) instead of your email and password.',
       };
-
-  bool _isWeak(String pin) {
-    if (pin.split('').toSet().length == 1) return true; // 111111
-    const asc = '0123456789';
-    const desc = '9876543210';
-    return asc.contains(pin) || desc.contains(pin); // 123456 / 654321
-  }
 
   Future<void> _onCompleted(String pin) async {
     final lock = context.read<AppLockProvider>();
+    final auth = context.read<AuthProvider>();
     setState(() => _error = null);
 
     switch (_step) {
@@ -190,49 +179,33 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         if (res.ok) {
           setState(() => _step = _SetupStep.create);
         } else if (res.remaining <= 0) {
-          await context.read<AuthProvider>().signOut();
+          await lock.clearForSignOut();
+          if (mounted) await auth.signOut();
           if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
           return;
         } else {
           setState(() => _error = 'Incorrect PIN. ${res.remaining} attempt(s) left.');
         }
         break;
+
       case _SetupStep.create:
-        if (_isWeak(pin)) {
-          setState(() => _error = 'That PIN is too easy to guess. Avoid repeated or sequential digits.');
-        } else {
-          setState(() {
-            _firstPin = pin;
-            _step = _SetupStep.confirm;
-          });
-        }
-        break;
-      case _SetupStep.confirm:
-        if (pin != _firstPin) {
-          setState(() {
-            _error = "PINs didn't match. Please start again.";
-            _firstPin = '';
-            _step = _SetupStep.create;
-          });
-          break;
-        }
         setState(() => _busy = true);
-        final needsBiometricStep = lock.biometricAvailable && !lock.biometricEnabled;
-        final ok = await lock.createPin(pin, deferCompletion: needsBiometricStep);
+        final email = auth.user?.email ?? auth.userProfile?.email ?? lock.cachedEmail;
+        final name = auth.userProfile?.fullName ?? auth.user?.displayName ?? lock.cachedName;
+        final ok = await lock.createPin(
+          pin,
+          email: email,
+          name: name,
+        );
         if (!mounted) return;
         setState(() => _busy = false);
         if (!ok) {
           setState(() {
             _error = 'Could not save your PIN. Please try again.';
-            _step = _SetupStep.create;
           });
-        } else if (needsBiometricStep) {
-          setState(() => _step = _SetupStep.biometric);
         } else {
           _finish();
         }
-        break;
-      case _SetupStep.biometric:
         break;
     }
     _padKey.currentState?.clear();
@@ -243,9 +216,19 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     lock.completePinSetup();
     if (widget.isChange && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your login PIN & security settings have been updated.')),
+        const SnackBar(
+          content: Text('Your 6-digit Login PIN has been saved!'),
+          backgroundColor: AppTheme.accent,
+        ),
       );
       Navigator.of(context).pop();
+    } else if (mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Login PIN activated! Next time you open the app, just enter your PIN.'),
+          backgroundColor: AppTheme.accent,
+        ),
+      );
     }
     // First-time setup: AuthWrapper rebuilds to HomeScreen automatically.
   }
@@ -256,7 +239,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: widget.isChange
-          ? AppBar(backgroundColor: Colors.white, elevation: 0, title: const Text('Change PIN'))
+          ? AppBar(backgroundColor: Colors.white, elevation: 0, title: const Text('Security & Login PIN'))
           : null,
       body: SafeArea(
         child: Center(
@@ -315,61 +298,45 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                     color: AppTheme.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    _step == _SetupStep.biometric ? LucideIcons.fingerprint : LucideIcons.lockKeyhole,
+                  child: const Icon(
+                    LucideIcons.lockKeyhole,
                     color: AppTheme.primary,
                     size: 28,
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(_title,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center),
+                Text(
+                  _title,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 8),
-                Text(_subtitle,
-                    style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
-                    textAlign: TextAlign.center),
+                Text(
+                  _subtitle,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 36,
                   child: _error == null
                       ? null
-                      : Text(_error!,
+                      : Text(
+                          _error!,
                           style: const TextStyle(fontSize: 12.5, color: AppTheme.error),
-                          textAlign: TextAlign.center),
+                          textAlign: TextAlign.center,
+                        ),
                 ),
-                if (_step == _SetupStep.biometric) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final messenger = ScaffoldMessenger.maybeOf(context);
-                        await lock.setBiometricEnabled(true);
-                        final ok = await lock.unlockWithBiometric();
-                        if (!ok) {
-                          await lock.setBiometricEnabled(false);
-                          messenger?.showSnackBar(
-                            const SnackBar(content: Text('Fingerprint not confirmed. You can turn it on later in Profile.')),
-                          );
-                        }
-                        if (mounted) _finish();
-                      },
-                      icon: const Icon(LucideIcons.fingerprint, size: 18),
-                      label: const Text('Use fingerprint / face'),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _finish,
-                    child: const Text('Not now', style: TextStyle(color: AppTheme.textSecondary)),
-                  ),
-                ] else
-                  PinPad(key: _padKey, enabled: !_busy, onCompleted: _onCompleted),
-                if (!widget.isChange && _step != _SetupStep.biometric) ...[
+                PinPad(key: _padKey, enabled: !_busy, onCompleted: _onCompleted),
+                if (!widget.isChange) ...[
                   const SizedBox(height: 16),
                   TextButton.icon(
-                    onPressed: () => context.read<AuthProvider>().signOut(),
+                    onPressed: () async {
+                      final lockProv = context.read<AppLockProvider>();
+                      final authProv = context.read<AuthProvider>();
+                      await lockProv.clearForSignOut();
+                      await authProv.signOut();
+                    },
                     icon: const Icon(LucideIcons.logOut, size: 16, color: AppTheme.textSecondary),
                     label: const Text('Sign out', style: TextStyle(color: AppTheme.textSecondary)),
                   ),
@@ -414,9 +381,20 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final lock = context.read<AppLockProvider>();
-      if (lock.biometricEnabled) lock.unlockWithBiometric();
+      _tryBiometricOnLaunch();
     });
+  }
+
+  Future<void> _tryBiometricOnLaunch() async {
+    if (!mounted) return;
+    final lock = context.read<AppLockProvider>();
+    final auth = context.read<AuthProvider>();
+    if (lock.biometricEnabled) {
+      final ok = await lock.unlockWithBiometric();
+      if (ok && mounted && !auth.isAuthenticated) {
+        await auth.restoreSessionAfterPinUnlock();
+      }
+    }
   }
 
   Future<void> _onCompleted(String pin) async {
@@ -425,12 +403,22 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
       _error = null;
     });
     final lock = context.read<AppLockProvider>();
+    final auth = context.read<AuthProvider>();
     final res = await lock.unlockWithPin(pin);
     if (!mounted) return;
-    if (res.ok) return; // overlay disappears
+    if (res.ok) {
+      if (!auth.isAuthenticated) {
+        await auth.restoreSessionAfterPinUnlock(
+          email: res.email,
+          password: res.password,
+        );
+      }
+      return; // overlay disappears
+    }
     if (res.remaining <= 0) {
       // Too many wrong attempts: force a full email + password sign-in.
-      await context.read<AuthProvider>().signOut();
+      await lock.clearForSignOut();
+      await auth.signOut();
       return;
     }
     setState(() {
@@ -445,9 +433,13 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
   Widget build(BuildContext context) {
     final lock = context.watch<AppLockProvider>();
     final auth = context.watch<AuthProvider>();
-    final name = auth.userProfile?.fullName.trim();
-    final email = auth.user?.email ?? '';
-    final greetingName = (name != null && name.isNotEmpty) ? name.split(' ').first : null;
+    final rawName = (auth.userProfile?.fullName.trim().isNotEmpty == true)
+        ? auth.userProfile!.fullName.trim()
+        : lock.cachedName.trim();
+    final email = (auth.user?.email?.isNotEmpty == true)
+        ? auth.user!.email!
+        : lock.cachedEmail;
+    final greetingName = rawName.isNotEmpty ? rawName.split(' ').first : null;
 
     return Material(
       color: Colors.white,
@@ -467,7 +459,9 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  email.isNotEmpty ? 'Enter your PIN to continue as $email' : 'Enter your PIN to continue',
+                  email.isNotEmpty
+                      ? 'Enter your 6-digit PIN to login as $email'
+                      : 'Enter your 6-digit PIN to login',
                   style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -476,19 +470,31 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
                   height: 36,
                   child: _error == null
                       ? null
-                      : Text(_error!,
+                      : Text(
+                          _error!,
                           style: const TextStyle(fontSize: 12.5, color: AppTheme.error),
-                          textAlign: TextAlign.center),
+                          textAlign: TextAlign.center,
+                        ),
                 ),
                 PinPad(
                   key: _padKey,
                   enabled: !_busy,
                   onCompleted: _onCompleted,
-                  onBiometric: lock.biometricEnabled ? () => lock.unlockWithBiometric() : null,
+                  onBiometric: lock.biometricAvailable
+                      ? () async {
+                          final ok = await lock.unlockWithBiometric();
+                          if (ok && mounted && !auth.isAuthenticated) {
+                            await auth.restoreSessionAfterPinUnlock();
+                          }
+                        }
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () => context.read<AuthProvider>().signOut(),
+                  onPressed: () async {
+                    await lock.clearForSignOut();
+                    await auth.signOut();
+                  },
                   child: const Text(
                     'Forgot PIN? Sign in with email & password',
                     style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
@@ -502,4 +508,3 @@ class _PinUnlockViewState extends State<_PinUnlockView> {
     );
   }
 }
-

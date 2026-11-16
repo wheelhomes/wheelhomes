@@ -126,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Wheelhomes v1.0.0',
+                      'Wheelhomes v1.2.1',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,

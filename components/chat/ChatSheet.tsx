@@ -246,6 +246,7 @@ export default function ChatSheet({ isOpen, onClose, jobId, currentUserId, curre
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
+                        {/* In-app online voice call temporarily commented out
                         <button
                             type="button"
                             onClick={async () => {
@@ -275,6 +276,7 @@ export default function ChatSheet({ isOpen, onClose, jobId, currentUserId, curre
                         >
                             <Phone className="w-4 h-4" />
                         </button>
+                        */}
                         <button
                             type="button"
                             onClick={() => {

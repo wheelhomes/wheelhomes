@@ -57,11 +57,13 @@ class _HomeScreenState extends State<HomeScreen> {
         reqProvider.listenToProviderJobs(user.uid);
         Provider.of<PaymentProvider>(context, listen: false).listenToUserTransactions(user.uid);
         Provider.of<NotificationProvider>(context, listen: false).listenToNotifications(user.uid);
+        /* In-app online voice call temporarily commented out
         final authProfile = Provider.of<AuthProvider>(context, listen: false).userProfile;
         Provider.of<CallProvider>(context, listen: false).listenForIncomingCalls(
           user.uid,
           authProfile?.fullName ?? user.displayName ?? 'Wheelhomes User',
         );
+        */
       }
       // Silently check if a newer app version is available
       UpdateService.checkAndPromptUpdate(context);

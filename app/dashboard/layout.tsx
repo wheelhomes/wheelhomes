@@ -234,6 +234,7 @@ export default function DashboardLayout({
                     userRole={userProfile.role}
                 />
             )}
+            {/* In-app online voice call temporarily commented out
             {auth.currentUser?.uid && (
                 <GlobalCallManager
                     userId={auth.currentUser.uid}
@@ -245,6 +246,7 @@ export default function DashboardLayout({
                     }
                 />
             )}
+            */}
             {children}
         </>
     );

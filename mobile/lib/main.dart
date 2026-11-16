@@ -47,7 +47,7 @@ class WheelhomesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider(), lazy: false),
         ChangeNotifierProvider(create: (_) => PropertyProvider()),
         ChangeNotifierProvider(create: (_) => RequestProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
@@ -64,9 +64,10 @@ class WheelhomesApp extends StatelessWidget {
         builder: (context, child) => Stack(
           children: [
             if (child != null) child,
-            // PIN lock sits above every route; incoming calls still ring on top of it.
+            // PIN lock sits above every route.
             const AppLockOverlay(),
-            const CallOverlay(),
+            // In-app online voice call temporarily commented out:
+            // const CallOverlay(),
           ],
         ),
         home: const SplashScreen(),
@@ -81,22 +82,35 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-
-    // ── Step 1: Not logged in → Sign In
-    if (!authProvider.isAuthenticated) {
-      return const SignInScreen();
-    }
-
-    // ── Step 1.1: Wait until we know whether this device has a PIN, so the
-    // home screen never flashes before the lock screen on a restored session.
     final appLock = Provider.of<AppLockProvider>(context);
-    if (!appLock.isReady) {
+
+    // ── Step 1: Wait until device PIN status and Firebase Auth initialize ──
+    if (!appLock.isReady || !authProvider.isAuthReady) {
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(
           child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
         ),
       );
+    }
+
+    // ── Step 1.1: Not logged in → if device has an active PIN (user never signed out),
+    // keep a clean backdrop under AppLockOverlay and restore session after PIN unlock.
+    if (!authProvider.isAuthenticated) {
+      if (appLock.hasPin) {
+        if (!appLock.isLocked) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            authProvider.restoreSessionAfterPinUnlock();
+          });
+        }
+        return const Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(
+            child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+          ),
+        );
+      }
+      return const SignInScreen();
     }
 
     final profile = authProvider.userProfile;

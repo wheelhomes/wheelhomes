@@ -378,6 +378,7 @@ function RequestDetailsContent() {
                             <h3 className="text-lg font-semibold text-gray-900">
                                 Department Messages
                             </h3>
+                            {/* In-app online voice call temporarily commented out
                             {(request.providerId || request.hodId) &&
                                 !["pending", "open", "cancelled", "rejected"].includes(request.status) && (
                                     <button
@@ -397,6 +398,7 @@ function RequestDetailsContent() {
                                         <Phone className="w-3.5 h-3.5" /> Online Call
                                     </button>
                                 )}
+                            */}
                         </div>
                         {request.provider && !["pending", "open", "cancelled", "rejected"].includes(request.status) ? (
                             <UnifiedChat

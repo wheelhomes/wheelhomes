@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
     @Volatile
     private var isPlayerThreadRunning = false
     private var voiceInputRecord: AudioRecord? = null
+    private var pinLockHandler: PinLockHandler? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -57,7 +58,7 @@ class MainActivity : FlutterActivity() {
         try {
             startService(Intent(this, KeepAliveService::class.java))
         } catch (_: Exception) {}
-        PinLockHandler(this, flutterEngine.dartExecutor.binaryMessenger)
+        pinLockHandler = PinLockHandler(this, flutterEngine.dartExecutor.binaryMessenger)
 
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel = channel

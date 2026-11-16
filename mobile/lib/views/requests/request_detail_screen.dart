@@ -690,6 +690,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                     ),
                   ),
                 ),
+                /* In-app online voice call temporarily commented out
                 if ((req.providerId != null && req.providerId!.isNotEmpty) || (phone != null && phone.isNotEmpty)) ...[
                   const SizedBox(width: 10),
                   Expanded(
@@ -729,6 +730,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                     ),
                   ),
                 ],
+                */
               ],
             ),
         ],

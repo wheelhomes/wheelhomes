@@ -14,12 +14,14 @@ class AuthProvider with ChangeNotifier {
   UserProfile? _userProfile;
   StreamSubscription<UserProfile?>? _profileSubscription;
   bool _isLoading = false;
+  bool _isAuthReady = false;
   String? _errorMessage;
   bool _isEmailVerifiedLocally = false;
 
   User? get user => _user;
   UserProfile? get userProfile => _userProfile;
   bool get isLoading => _isLoading;
+  bool get isAuthReady => _isAuthReady;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _user != null;
   bool get isEmailVerified =>
@@ -28,8 +30,15 @@ class AuthProvider with ChangeNotifier {
       (_userProfile?.isEmailVerifiedGlobally == true);
 
   AuthProvider() {
+    final initialUser = _authService.currentUser;
+    if (initialUser != null) {
+      _user = initialUser;
+      _isAuthReady = true;
+      fetchProfile(initialUser.uid);
+    }
     _authService.authStateChanges.listen((user) async {
       _user = user;
+      _isAuthReady = true;
       _profileSubscription?.cancel();
       if (user != null) {
         notifyListeners();
@@ -59,7 +68,14 @@ class AuthProvider with ChangeNotifier {
     try {
       final creds = await _authService.signInWithEmail(email: email, password: password);
       if (creds.user != null) {
+        _user = creds.user;
         await fetchProfile(creds.user!.uid);
+        await PinLockService.saveCredentials(
+          uid: creds.user!.uid,
+          email: email.trim(),
+          password: password.trim(),
+          name: _userProfile?.fullName ?? creds.user!.displayName ?? '',
+        );
       }
       _setLoading(false);
       return true;
@@ -68,6 +84,46 @@ class AuthProvider with ChangeNotifier {
       _setLoading(false);
       return false;
     }
+  }
+
+  /// Silently restores the Firebase session after a valid PIN / Biometric unlock
+  /// if the underlying Firebase Auth token was not yet loaded on cold start.
+  Future<bool> restoreSessionAfterPinUnlock({
+    String? email,
+    String? password,
+  }) async {
+    if (_user != null) return true;
+    final current = _authService.currentUser;
+    if (current != null) {
+      _user = current;
+      notifyListeners();
+      await fetchProfile(current.uid);
+      return true;
+    }
+    String targetEmail = (email ?? '').trim();
+    String targetPass = password ?? '';
+    if (targetEmail.isEmpty || targetPass.isEmpty) {
+      final saved = await PinLockService.getSavedCredentials();
+      if (targetEmail.isEmpty) targetEmail = (saved['email'] ?? '').trim();
+      if (targetPass.isEmpty) targetPass = saved['password'] ?? '';
+    }
+    if (targetEmail.isNotEmpty && targetPass.isNotEmpty) {
+      try {
+        final creds = await _authService.signInWithEmail(
+          email: targetEmail,
+          password: targetPass,
+        );
+        if (creds.user != null) {
+          _user = creds.user;
+          notifyListeners();
+          await fetchProfile(creds.user!.uid);
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[AuthProvider] Silent PIN session restore note: $e');
+      }
+    }
+    return _user != null;
   }
 
   Future<bool> signUp({
@@ -86,7 +142,14 @@ class AuthProvider with ChangeNotifier {
         phone: phone,
       );
       if (creds.user != null) {
+        _user = creds.user;
         await fetchProfile(creds.user!.uid);
+        await PinLockService.saveCredentials(
+          uid: creds.user!.uid,
+          email: email.trim(),
+          password: password.trim(),
+          name: fullName.trim(),
+        );
       }
       _setLoading(false);
       return true;
