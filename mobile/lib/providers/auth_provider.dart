@@ -15,6 +15,8 @@ class AuthProvider with ChangeNotifier {
   StreamSubscription<UserProfile?>? _profileSubscription;
   bool _isLoading = false;
   bool _isAuthReady = false;
+  bool _isRestoringSession = false;
+  bool _restoreAttempted = false;
   String? _errorMessage;
   bool _isEmailVerifiedLocally = false;
 
@@ -22,6 +24,8 @@ class AuthProvider with ChangeNotifier {
   UserProfile? get userProfile => _userProfile;
   bool get isLoading => _isLoading;
   bool get isAuthReady => _isAuthReady;
+  bool get isRestoringSession => _isRestoringSession;
+  bool get restoreAttempted => _restoreAttempted;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _user != null;
   bool get isEmailVerified =>
@@ -35,12 +39,21 @@ class AuthProvider with ChangeNotifier {
       _user = initialUser;
       _isAuthReady = true;
       fetchProfile(initialUser.uid);
+    } else {
+      // Safety fallback: never block the UI forever if Firebase Auth stream is slow on cold start.
+      Future.delayed(const Duration(seconds: 3), () {
+        if (!_isAuthReady) {
+          _isAuthReady = true;
+          notifyListeners();
+        }
+      });
     }
     _authService.authStateChanges.listen((user) async {
       _user = user;
       _isAuthReady = true;
       _profileSubscription?.cancel();
       if (user != null) {
+        _restoreAttempted = false;
         notifyListeners();
         fetchProfile(user.uid);
         _profileSubscription = _authService.userProfileStream(user.uid).listen(
@@ -93,37 +106,45 @@ class AuthProvider with ChangeNotifier {
     String? password,
   }) async {
     if (_user != null) return true;
-    final current = _authService.currentUser;
-    if (current != null) {
-      _user = current;
-      notifyListeners();
-      await fetchProfile(current.uid);
-      return true;
-    }
-    String targetEmail = (email ?? '').trim();
-    String targetPass = password ?? '';
-    if (targetEmail.isEmpty || targetPass.isEmpty) {
-      final saved = await PinLockService.getSavedCredentials();
-      if (targetEmail.isEmpty) targetEmail = (saved['email'] ?? '').trim();
-      if (targetPass.isEmpty) targetPass = saved['password'] ?? '';
-    }
-    if (targetEmail.isNotEmpty && targetPass.isNotEmpty) {
-      try {
-        final creds = await _authService.signInWithEmail(
-          email: targetEmail,
-          password: targetPass,
-        );
-        if (creds.user != null) {
-          _user = creds.user;
-          notifyListeners();
-          await fetchProfile(creds.user!.uid);
-          return true;
-        }
-      } catch (e) {
-        debugPrint('[AuthProvider] Silent PIN session restore note: $e');
+    if (_isRestoringSession) return false;
+    _isRestoringSession = true;
+    notifyListeners();
+
+    try {
+      final current = _authService.currentUser;
+      if (current != null) {
+        _user = current;
+        await fetchProfile(current.uid);
+        return true;
       }
+      String targetEmail = (email ?? '').trim();
+      String targetPass = password ?? '';
+      if (targetEmail.isEmpty || targetPass.isEmpty) {
+        final saved = await PinLockService.getSavedCredentials();
+        if (targetEmail.isEmpty) targetEmail = (saved['email'] ?? '').trim();
+        if (targetPass.isEmpty) targetPass = saved['password'] ?? '';
+      }
+      if (targetEmail.isNotEmpty && targetPass.isNotEmpty) {
+        try {
+          final creds = await _authService.signInWithEmail(
+            email: targetEmail,
+            password: targetPass,
+          ).timeout(const Duration(seconds: 12));
+          if (creds.user != null) {
+            _user = creds.user;
+            await fetchProfile(creds.user!.uid);
+            return true;
+          }
+        } catch (e) {
+          debugPrint('[AuthProvider] Silent PIN session restore note: $e');
+        }
+      }
+      return _user != null;
+    } finally {
+      _isRestoringSession = false;
+      _restoreAttempted = true;
+      notifyListeners();
     }
-    return _user != null;
   }
 
   Future<bool> signUp({

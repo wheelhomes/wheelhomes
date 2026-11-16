@@ -99,14 +99,31 @@ class AuthWrapper extends StatelessWidget {
     if (!authProvider.isAuthenticated) {
       if (appLock.hasPin) {
         if (!appLock.isLocked) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            authProvider.restoreSessionAfterPinUnlock();
-          });
+          if (!authProvider.restoreAttempted && !authProvider.isRestoringSession) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              authProvider.restoreSessionAfterPinUnlock();
+            });
+          } else if (authProvider.restoreAttempted && !authProvider.isRestoringSession) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              appLock.clearForSignOut();
+            });
+            return const SignInScreen();
+          }
         }
         return const Scaffold(
           backgroundColor: Colors.white,
           body: Center(
-            child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+                SizedBox(height: 16),
+                Text(
+                  'Signing you in...',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
           ),
         );
       }
