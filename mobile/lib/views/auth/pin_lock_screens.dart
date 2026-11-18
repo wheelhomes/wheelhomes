@@ -137,7 +137,7 @@ class _PadButton extends StatelessWidget {
 // Create / change PIN
 // ---------------------------------------------------------------------------
 
-enum _SetupStep { current, create }
+enum _SetupStep { current, create, confirm }
 
 class PinSetupScreen extends StatefulWidget {
   /// When true the user must enter their current PIN first (Profile -> Change PIN).
@@ -151,18 +151,22 @@ class PinSetupScreen extends StatefulWidget {
 class _PinSetupScreenState extends State<PinSetupScreen> {
   final _padKey = GlobalKey<PinPadState>();
   late _SetupStep _step = widget.isChange ? _SetupStep.current : _SetupStep.create;
+  String _firstPin = '';
   String? _error;
   bool _busy = false;
 
   String get _title => switch (_step) {
-        _SetupStep.current => 'Enter current PIN',
-        _SetupStep.create => widget.isChange ? 'Enter your new 6-digit PIN' : 'Set your 6-digit Login PIN',
+        _SetupStep.current => 'Enter Current PIN',
+        _SetupStep.create => 'Create a New 6-Digit Login PIN',
+        _SetupStep.confirm => 'Confirm Your New Login PIN',
       };
 
   String get _subtitle => switch (_step) {
         _SetupStep.current => 'For your security, confirm your current PIN first.',
         _SetupStep.create =>
-          'Every time you open Wheelhomes, you will log in with this ${PinLockService.pinLength}-digit PIN (or fingerprint) instead of your email and password.',
+          'Choose a ${PinLockService.pinLength}-digit PIN you will use to log in quickly instead of your email and password.',
+        _SetupStep.confirm =>
+          'Re-enter the same ${PinLockService.pinLength}-digit PIN to confirm and activate it.',
       };
 
   Future<void> _onCompleted(String pin) async {
@@ -189,6 +193,22 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         break;
 
       case _SetupStep.create:
+        setState(() {
+          _firstPin = pin;
+          _step = _SetupStep.confirm;
+        });
+        break;
+
+      case _SetupStep.confirm:
+        if (pin != _firstPin) {
+          setState(() {
+            _firstPin = '';
+            _step = _SetupStep.create;
+            _error = 'PINs did not match. Please enter your new PIN again.';
+          });
+          HapticFeedback.heavyImpact();
+          break;
+        }
         setState(() => _busy = true);
         final email = auth.user?.email ?? auth.userProfile?.email ?? lock.cachedEmail;
         final name = auth.userProfile?.fullName ?? auth.user?.displayName ?? lock.cachedName;
@@ -201,6 +221,8 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         setState(() => _busy = false);
         if (!ok) {
           setState(() {
+            _firstPin = '';
+            _step = _SetupStep.create;
             _error = 'Could not save your PIN. Please try again.';
           });
         } else {

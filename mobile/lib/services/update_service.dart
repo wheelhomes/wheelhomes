@@ -37,8 +37,8 @@ class AppUpdateInfo {
 
 class UpdateService {
   // Current app version matching pubspec.yaml
-  static const String currentVersion = '1.2.2';
-  static const int currentBuildNumber = 6;
+  static const String currentVersion = '1.2.3';
+  static const int currentBuildNumber = 7;
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
