@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
+import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
+
+const MAX_B64_LENGTH = 250_000;
+const MAX_ROOMS = 500;
 
 interface VoiceFrame {
     seq: number;
@@ -34,19 +39,40 @@ function pruneOldRooms() {
     }
 }
 
+async function isCallParticipant(callId: string, uid: string): Promise<boolean> {
+    try {
+        const callSnap = await adminDb().collection("calls").doc(callId).get();
+        if (!callSnap.exists) return false;
+        const data = callSnap.data() || {};
+        return data.callerId === uid || data.calleeId === uid;
+    } catch {
+        return false;
+    }
+}
+
 export async function POST(req: NextRequest) {
     try {
+        const caller = await requireAuth(req);
+        if (caller instanceof NextResponse) return caller;
+
         const body = await req.json();
         const callId = String(body.callId || "").trim();
         const senderId = String(body.senderId || "").trim();
         const b64 = String(body.b64 || "").trim();
         const rate = Number(body.rate) || 16000;
 
-        if (!callId || !senderId || !b64) {
+        if (!callId || !senderId || !b64 || b64.length > MAX_B64_LENGTH) {
             return NextResponse.json({ ok: false }, { status: 400 });
         }
 
+        if (senderId !== caller.uid || !(await isCallParticipant(callId, caller.uid))) {
+            return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+        }
+
         pruneOldRooms();
+        if (!rooms.has(callId) && rooms.size >= MAX_ROOMS) {
+            return NextResponse.json({ ok: false, error: "Server busy" }, { status: 503 });
+        }
 
         let room = rooms.get(callId);
         if (!room) {
@@ -58,7 +84,7 @@ export async function POST(req: NextRequest) {
         room.updatedAt = Date.now();
         room.frames.push({
             seq: room.seq,
-            senderId,
+            senderId: caller.uid,
             b64,
             rate,
             ts: room.updatedAt,
@@ -71,17 +97,24 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ ok: true, seq: room.seq });
     } catch (err: any) {
-        return NextResponse.json({ ok: false, error: err?.message }, { status: 500 });
+        return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
     }
 }
 
 export async function GET(req: NextRequest) {
+    const caller = await requireAuth(req);
+    if (caller instanceof NextResponse) return caller;
+
     const { searchParams } = new URL(req.url);
     const callId = (searchParams.get("callId") || "").trim();
     const afterSeq = Number(searchParams.get("afterSeq") || "0");
 
     if (!callId) {
         return NextResponse.json({ frames: [], latestSeq: 0 });
+    }
+
+    if (!(await isCallParticipant(callId, caller.uid))) {
+        return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
     }
 
     const room = rooms.get(callId);

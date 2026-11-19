@@ -50,3 +50,8 @@ next-env.d.ts
 
 # local maintenance / scratch scripts
 scripts/*.mjs
+
+# Android release signing keys
+mobile/android/key.properties
+*.jks
+*.keystore

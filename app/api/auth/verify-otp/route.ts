@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
-import { requireAuth, rateLimit, tooManyRequests } from '@/lib/api-auth';
+import { requireAuth, rateLimitDistributed, tooManyRequests } from '@/lib/api-auth';
 import { verifyDeterministicOtp } from '@/lib/otp';
 
 export async function POST(req: Request) {
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
         if (caller instanceof NextResponse) return caller;
 
         // Brute force protection: Max 6 verify attempts per 10 minutes per UID
-        if (!rateLimit(`verify-attempt:${caller.uid}`, 6, 10 * 60 * 1000)) {
+        if (!(await rateLimitDistributed(`verify-attempt:${caller.uid}`, 6, 10 * 60 * 1000))) {
             return tooManyRequests();
         }
 
@@ -26,13 +26,9 @@ export async function POST(req: Request) {
 
         let isCodeValid = false;
         let otpDocRef: any = null;
+        let firestoreChecked = false;
 
-        // Check 1: Cryptographic Stateless HMAC verification (100% resilient across serverless cold starts & database disconnects)
-        if (verifyDeterministicOtp(caller.uid, code)) {
-            isCodeValid = true;
-        }
-
-        // Check 2: Database OTP verification (if Firestore is accessible)
+        // Check 1: Single-use hashed Database OTP verification (primary)
         try {
             otpDocRef = adminDb()
                 .collection('users')
@@ -41,6 +37,7 @@ export async function POST(req: Request) {
                 .doc('otp');
 
             const otpSnap = await otpDocRef.get();
+            firestoreChecked = true;
             if (otpSnap.exists) {
                 const otpData = otpSnap.data() || {};
                 const expiresAt = Number(otpData.expiresAt || 0);
@@ -56,13 +53,18 @@ export async function POST(req: Request) {
                         crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(expectedHash))
                     ) {
                         isCodeValid = true;
-                    } else if (!isCodeValid) {
+                    } else {
                         await otpDocRef.update({ attempts: attempts + 1 }).catch(() => {});
                     }
                 }
             }
         } catch (dbErr: any) {
             console.warn('[API verify-otp] Firestore OTP lookup notice:', dbErr.message || dbErr);
+        }
+
+        // Check 2: Stateless HMAC fallback ONLY if Firestore was unreachable and OTP_SECRET is configured
+        if (!firestoreChecked && verifyDeterministicOtp(caller.uid, code)) {
+            isCodeValid = true;
         }
 
         if (!isCodeValid) {

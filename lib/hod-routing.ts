@@ -11,7 +11,7 @@ import {
     getDocs,
     addDoc,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import {
     ServiceCategoryItem,
     slugifyCategory,
@@ -767,11 +767,13 @@ export async function assignHodForCategoryAndState(params: {
 
     // 2. Dispatch Official HOD Appointment Email to the Provider
     if (resolvedEmail) {
+        const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
         sendHodAppointmentEmailAction({
             email: resolvedEmail,
             name: resolvedName || params.hodName,
             categoryName: params.categoryName,
             stateName: params.stateName,
+            idToken,
         }).catch((err) => {
             console.warn("[assignHodForCategoryAndState] Email notice:", err);
         });
@@ -1247,6 +1249,7 @@ export async function assignJobToHodByAdmin(params: {
         ).trim();
         const jobData = jobSnap?.exists() ? jobSnap.data() : {};
         if (hodEmail) {
+            const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
             sendHodJobDispatchEmailAction({
                 email: hodEmail,
                 hodName: params.hodName,
@@ -1258,6 +1261,7 @@ export async function assignJobToHodByAdmin(params: {
                     jobData?.description || `${params.categoryName} service request`
                 ),
                 preferredTime: String(jobData?.preferredTime || "As soon as possible"),
+                idToken,
             }).catch(() => {});
         }
     } catch (_) {}

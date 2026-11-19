@@ -186,7 +186,8 @@ export default function UserManagementPage() {
 
             if (candidateEmail) {
                 console.log(`[Admin Users] Sending approval email → to: "${candidateEmail}", name: "${candidateName}"`);
-                sendApprovalEmailAction(candidateEmail, candidateName)
+                const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+                sendApprovalEmailAction(candidateEmail, candidateName, idToken)
                     .then(res => console.log(`[Admin Users] ✅ Approval email result for ${candidateEmail}:`, res))
                     .catch(err => console.error("[Admin Users] ❌ Failed to dispatch approval email:", err));
             } else {
@@ -244,7 +245,8 @@ export default function UserManagementPage() {
 
             if (candidateEmail) {
                 console.log(`[Admin Users] Sending rejection email → to: "${candidateEmail}", name: "${candidateName}", reason: "${rejectionReason.trim()}"`);
-                sendRejectionEmailAction(candidateEmail, candidateName, rejectionReason.trim())
+                const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+                sendRejectionEmailAction(candidateEmail, candidateName, rejectionReason.trim(), idToken)
                     .then(res => console.log(`[Admin Users] ✅ Rejection email result for ${candidateEmail}:`, res))
                     .catch(err => console.error("[Admin Users] ❌ Failed to dispatch rejection email:", err));
             }

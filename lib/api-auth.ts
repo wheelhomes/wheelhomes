@@ -28,29 +28,29 @@ export async function requireAuth(req: Request): Promise<VerifiedCaller | NextRe
 }
 
 /**
- * Ensures the authenticated caller has verified Administrator privileges.
- * Checks custom claims, superadmin emails, 'admins' collection, and 'users' admin role.
+ * Checks whether an already-verified caller has Administrator privileges.
  */
-export async function requireAdmin(req: Request): Promise<VerifiedCaller | NextResponse> {
-    const caller = await requireAuth(req);
-    if (caller instanceof NextResponse) return caller;
-
+export async function isCallerAdmin(caller: VerifiedCaller): Promise<boolean> {
     // 1. Custom token claim
     if (caller.token.admin === true) {
-        return caller;
+        return true;
     }
 
-    // 2. Designated superadmin emails
+    // 2. Designated superadmin emails (must have verified email)
     const superAdmins = ['admin@wheelhomes.com', 'admin@wheelofcomfort.com'];
-    if (caller.email && superAdmins.includes(caller.email.toLowerCase())) {
-        return caller;
+    if (
+        caller.email &&
+        caller.token.email_verified === true &&
+        superAdmins.includes(caller.email.toLowerCase())
+    ) {
+        return true;
     }
 
     // 3. Firestore 'admins' collection
     try {
         const adminDoc = await adminDb().collection('admins').doc(caller.uid).get();
         if (adminDoc.exists) {
-            return caller;
+            return true;
         }
     } catch (e) {
         console.warn('[requireAdmin] Error checking admins collection:', e);
@@ -60,10 +60,25 @@ export async function requireAdmin(req: Request): Promise<VerifiedCaller | NextR
     try {
         const userDoc = await adminDb().collection('users').doc(caller.uid).get();
         if (userDoc.exists && userDoc.data()?.role === 'admin') {
-            return caller;
+            return true;
         }
     } catch (e) {
         console.warn('[requireAdmin] Error checking users collection:', e);
+    }
+
+    return false;
+}
+
+/**
+ * Ensures the authenticated caller has verified Administrator privileges.
+ * Checks custom claims, verified superadmin emails, 'admins' collection, and 'users' admin role.
+ */
+export async function requireAdmin(req: Request): Promise<VerifiedCaller | NextResponse> {
+    const caller = await requireAuth(req);
+    if (caller instanceof NextResponse) return caller;
+
+    if (await isCallerAdmin(caller)) {
+        return caller;
     }
 
     return NextResponse.json({ success: false, error: 'Forbidden: Admin access required' }, { status: 403 });
@@ -88,4 +103,35 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
 
 export function tooManyRequests() {
     return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
+}
+
+/**
+ * Firestore-backed distributed fixed-window rate limiter with in-memory fallback.
+ * Persists across serverless cold starts and multiple instances.
+ */
+export async function rateLimitDistributed(key: string, limit: number, windowMs: number): Promise<boolean> {
+    if (!rateLimit(key, limit, windowMs)) {
+        return false;
+    }
+
+    try {
+        const safeId = Buffer.from(key).toString("base64url").slice(0, 120);
+        const ref = adminDb().collection("_rate_limits").doc(safeId);
+        const now = Date.now();
+
+        return await adminDb().runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            const data = snap.exists ? snap.data() || {} : null;
+            if (!data || Number(data.reset || 0) < now) {
+                tx.set(ref, { count: 1, reset: now + windowMs, updatedAt: now });
+                return true;
+            }
+            const nextCount = Number(data.count || 0) + 1;
+            tx.update(ref, { count: nextCount, updatedAt: now });
+            return nextCount <= limit;
+        });
+    } catch {
+        // Fallback to in-memory result if Firestore is unavailable
+        return true;
+    }
 }

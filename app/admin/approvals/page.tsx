@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { db } from "../../../lib/firebase";
+import { auth, db } from "../../../lib/firebase";
 import { collection, query, where, getDocs, getDoc, addDoc, doc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import {
     CheckCircle2,
@@ -413,7 +413,8 @@ export default function AdminApprovalsPage() {
             // Trigger approval email notification asynchronously
             if (candidateEmail) {
                 console.log(`[Admin Approvals] Dispatching approval email to "${candidateEmail}"...`);
-                sendApprovalEmailAction(candidateEmail, candidateName)
+                const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+                sendApprovalEmailAction(candidateEmail, candidateName, idToken)
                     .then(res => {
                         console.log(`[Admin Approvals] ✅ Approval email result for ${candidateEmail}:`, res);
                     })
@@ -578,7 +579,8 @@ export default function AdminApprovalsPage() {
 
             console.log(`[Admin Reject] Sending rejection email → to: "${candidateEmail}", name: "${candidateName}", reason: "${finalReason.trim()}"`);
             if (candidateEmail) {
-                sendRejectionEmailAction(candidateEmail, candidateName, finalReason.trim())
+                const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+                sendRejectionEmailAction(candidateEmail, candidateName, finalReason.trim(), idToken)
                     .then(res => console.log("[Admin Reject] Email action result:", res))
                     .catch(err => console.warn("Notice: Email notification skipped or pending RESEND_API_KEY setup:", err));
             }

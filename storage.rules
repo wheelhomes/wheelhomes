@@ -17,14 +17,23 @@ service firebase.storage {
       return request.resource.size < 5 * 1024 * 1024; // 5MB limit
     }
 
-    // Admin = claim, admins/{uid} doc, users role, or (TEMPORARY) legacy admin email
+    // Admin = claim, admins/{uid} doc, users role, or (TEMPORARY) verified legacy admin email
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.get('admin', false) == true ||
         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
         (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin') ||
-        request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
+        (request.auth.token.get('email_verified', false) == true &&
+         request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com'])
+      );
+    }
+
+    function isAgentOrAdmin() {
+      return isAdmin() || (
+        isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'agent'
       );
     }
 
@@ -52,9 +61,11 @@ service firebase.storage {
     // Path: service_requests/{requestId}/{fileName}
     match /service_requests/{requestId}/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() 
-                   && validImageOrPdf()
-                   && validSize();
+      // Allow new file creation only (cannot overwrite or delete existing evidence unless admin)
+      allow create: if isSignedIn()
+                    && validImageOrPdf()
+                    && validSize();
+      allow update, delete: if isAdmin();
     }
 
     // --- PROPERTY PORTFOLIO PHOTOS ---
@@ -62,17 +73,24 @@ service firebase.storage {
     match /properties/{propertyId}/{allPaths=**} {
       // Public read so prospective clients can view property images
       allow read: if true;
-      allow write: if isSignedIn() 
-                   && validImageOrPdf()
-                   && validSize();
+      allow create: if isAgentOrAdmin()
+                    && validImageOrPdf()
+                    && validSize();
+      allow update, delete: if isAdmin() || (
+        isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/properties/$(propertyId)) &&
+        (firestore.get(/databases/(default)/documents/properties/$(propertyId)).data.get('agentId', '') == request.auth.uid ||
+         firestore.get(/databases/(default)/documents/properties/$(propertyId)).data.get('userId', '') == request.auth.uid)
+      );
     }
 
     // --- JOB EVIDENCE ---
     match /job_evidence/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn()
-                   && validImageOrPdf()
-                   && validSize();
+      allow create: if isSignedIn()
+                    && validImageOrPdf()
+                    && validSize();
+      allow update, delete: if isAdmin();
     }
 
     // --- PROVIDER DOCUMENTS ---

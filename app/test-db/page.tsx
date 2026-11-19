@@ -9,6 +9,9 @@ import { auth } from '@/lib/firebase';
 import { signInAnonymously } from 'firebase/auth';
 
 export default function TestDBPage() {
+    if (process.env.NODE_ENV === 'production') {
+        return null;
+    }
     const [logs, setLogs] = useState<string[]>([]);
     const [requestId, setRequestId] = useState<string | null>(null);
 

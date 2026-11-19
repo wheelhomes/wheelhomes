@@ -110,7 +110,8 @@ export default function VerificationSettingsPage() {
 
             // Dispatch pending review confirmation email
             if (user.email) {
-                sendPendingReviewEmailAction(user.email, user.fullName || 'Service Provider')
+                const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+                sendPendingReviewEmailAction(user.email, user.fullName || 'Service Provider', idToken)
                     .catch(err => console.warn('[Settings Verification] Notice: Pending review email dispatch:', err));
             }
 

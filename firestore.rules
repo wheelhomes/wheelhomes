@@ -14,7 +14,7 @@ service cloud.firestore {
     }
 
     // Admin = custom claim, admins/{uid} doc, users/{uid}.role == 'admin',
-    // or (TEMPORARY legacy fallback) designated admin email.
+    // or (TEMPORARY legacy fallback) verified designated admin email.
     // TODO: remove the email fallback once the admin claim / admins doc is set.
     function isAdmin() {
       return isSignedIn() && (
@@ -22,7 +22,8 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin') ||
-        request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com']
+        (request.auth.token.get('email_verified', false) == true &&
+         request.auth.token.get('email', '') in ['admin@wheelhomes.com', 'admin@wheelofcomfort.com'])
       );
     }
 
@@ -69,15 +70,20 @@ service cloud.firestore {
     function canUpdateJob(data) {
       return isSignedIn() && (
         isAdmin() ||
-        // Client may update their own job details (including clientApproved) but cannot alter escrow status
-        (isJobOwner(data) && jobIdentityLocked()) ||
+        // Client may update their own job details (including clientApproved) but cannot alter escrow or reassign provider
+        (isJobOwner(data) && jobIdentityLocked() && noneChanged(['providerId', 'hodId'])) ||
         // Assigned provider or designated State HOD: can dispatch assistants, update progress, and submit final bill
+        // Cannot self-approve (clientApproved) or alter price once approved/paid
         ((data.get('providerId', '') == request.auth.uid || data.get('hodId', '') == request.auth.uid) &&
-          jobIdentityLocked()) ||
+          jobIdentityLocked() &&
+          noneChanged(['clientApproved']) &&
+          (!(data.get('clientApproved', false) == true || data.get('paymentStatus', 'unpaid') != 'unpaid') ||
+            noneChanged(['finalAgreedPrice', 'budget', 'price']))) ||
         // Approved provider / HOD claiming or dispatching an assistant on an open/pending job
         (data.get('status', '') in ['open', 'pending'] &&
           isApprovedProvider() &&
           jobIdentityLocked() &&
+          noneChanged(['clientApproved', 'finalAgreedPrice', 'budget', 'price']) &&
           request.resource.data.get('providerId', '') == request.auth.uid &&
           request.resource.data.get('status', '') == 'accepted')
       );
@@ -116,8 +122,8 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     match /user_applications/{appId} {
       allow read, write: if isAdmin();
-      // Must be signed in to submit an application (no anonymous spam)
-      allow create: if isSignedIn();
+      // Must be signed in and bound to caller's UID
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
     }
 
     // ------------------------------------------------------------------
@@ -157,7 +163,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         resource.data.get('userId', '') == request.auth.uid ||
         resource.data.get('providerId', '') == request.auth.uid ||
-        resource.data.get('status', '') in ['pending', 'open'] ||
+        (resource.data.get('status', '') in ['pending', 'open'] && isApprovedProvider()) ||
         isAdmin()
       );
 
@@ -179,7 +185,7 @@ service cloud.firestore {
         resource.data.get('userId', '') == request.auth.uid ||
         resource.data.get('providerId', '') == request.auth.uid ||
         resource.data.get('hodId', '') == request.auth.uid ||
-        resource.data.get('status', '') in ['pending', 'open'] ||
+        (resource.data.get('status', '') in ['pending', 'open'] && isApprovedProvider()) ||
         (resource.data.get('invitedProviderIds', []) is list &&
          resource.data.get('invitedProviderIds', []).hasAny([request.auth.uid])) ||
         isAdmin()
@@ -260,19 +266,24 @@ service cloud.firestore {
         )
       );
 
-      // Create: own profile only; cannot grant admin or self-approve, cannot forge emailVerified
+      // Create: own profile only; cannot grant admin, self-approve, forge emailVerified, or set privileged fields
       allow create: if isSignedIn() && request.auth.uid == userId
                     && request.resource.data.get('role', '') != 'admin'
                     && request.resource.data.get('status', '') != 'approved'
-                    && request.resource.data.get('emailVerified', false) != true;
+                    && request.resource.data.get('emailVerified', false) != true
+                    && !request.resource.data.keys().hasAny([
+                      'isAdmin', 'approvedAt', 'approvedBy', 'rejectedAt',
+                      'suspended', 'isSuspended', 'rating', 'reviewCount',
+                      'walletBalance', 'earnings'
+                    ]);
 
       // Update: own profile only. Cannot become admin, cannot self-approve,
-      // cannot change role once approved, and cannot touch admin-managed or verification fields.
+      // cannot switch role once chosen (except from '' or 'pending_role_selection'), and cannot touch admin-managed fields.
       allow update: if isAdmin() || (
         isSignedIn() && request.auth.uid == userId
         && request.resource.data.get('role', '') != 'admin'
         && (request.resource.data.get('status', '') != 'approved' || resource.data.get('status', '') == 'approved')
-        && (resource.data.get('status', '') != 'approved' || request.resource.data.get('role', '') == resource.data.get('role', ''))
+        && (resource.data.get('role', '') in ['', 'pending_role_selection'] || request.resource.data.get('role', '') == resource.data.get('role', ''))
         && noneChanged([
           'isAdmin', 'approvedAt', 'approvedBy', 'rejectedAt',
           'suspended', 'isSuspended', 'rating', 'reviewCount', 'walletBalance', 'earnings',
@@ -299,24 +310,6 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
       allow write: if isAdmin();
-    }
-
-    // ------------------------------------------------------------------
-    // PROPERTIES (Real Estate Listings by Verified Users / Agents)
-    // ------------------------------------------------------------------
-    match /properties/{propertyId} {
-      // Publicly viewable by all users, prospective clients, and web visitors
-      allow read: if true;
-
-      // Created by authenticated users (agents, property owners, or admins)
-      allow create: if isSignedIn();
-
-      // Updated or deleted by listing author / agent or admin
-      allow update, delete: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.get('agentId', '') == request.auth.uid ||
-        resource.data.get('userId', '') == request.auth.uid
-      );
     }
 
     // ------------------------------------------------------------------
@@ -351,6 +344,18 @@ service cloud.firestore {
     match /app_config/{configId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // ADMIN AUDIT LOGS & RATE LIMITS (Admin SDK write-only)
+    // ------------------------------------------------------------------
+    match /admin_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /_rate_limits/{limitId} {
+      allow read, write: if false;
     }
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { requireAdmin, rateLimit, tooManyRequests } from "@/lib/api-auth";
+import { requireAdmin, rateLimitDistributed, tooManyRequests } from "@/lib/api-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
 interface CleanupTestDataBody {
     userIds?: string[];
@@ -13,14 +14,14 @@ export async function POST(req: Request) {
         const caller = await requireAdmin(req);
         if (caller instanceof NextResponse) return caller;
 
-        if (!rateLimit(`admin-cleanup-test:${caller.uid}`, 10, 60 * 1000)) {
+        if (!(await rateLimitDistributed(`admin-cleanup-test:${caller.uid}`, 10, 60 * 1000))) {
             return tooManyRequests();
         }
 
         const body = (await req.json()) as CleanupTestDataBody;
-        const userIds = Array.isArray(body.userIds) ? body.userIds.filter((id) => id && id !== caller.uid) : [];
-        const applicationIds = Array.isArray(body.applicationIds) ? body.applicationIds.filter(Boolean) : [];
-        const requestIds = Array.isArray(body.requestIds) ? body.requestIds.filter(Boolean) : [];
+        const userIds = Array.isArray(body.userIds) ? body.userIds.filter((id) => typeof id === "string" && id && id !== caller.uid).slice(0, 100) : [];
+        const applicationIds = Array.isArray(body.applicationIds) ? body.applicationIds.filter((id) => typeof id === "string" && id).slice(0, 100) : [];
+        const requestIds = Array.isArray(body.requestIds) ? body.requestIds.filter((id) => typeof id === "string" && id).slice(0, 100) : [];
 
         const db = adminDb();
         let deletedUsers = 0;
@@ -91,6 +92,15 @@ export async function POST(req: Request) {
             }
             if (removed) deletedRequests += 1;
         }
+
+        await logAdminAction({
+            actorUid: caller.uid,
+            actorEmail: caller.email,
+            action: "system.cleanup_test_data",
+            targetType: "system",
+            targetId: "cleanup-test-data",
+            details: { deletedUsers, deletedApplications, deletedRequests, skippedProtectedRequests },
+        });
 
         return NextResponse.json({
             success: true,

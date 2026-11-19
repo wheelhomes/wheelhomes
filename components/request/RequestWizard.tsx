@@ -10,7 +10,7 @@ import {
     ShieldCheck,
     Sparkles,
 } from "lucide-react";
-import { db } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
 import { collection, addDoc, doc, getDoc, setDoc } from "firebase/firestore";
 import { useServiceCategories, getLucideIcon } from "@/lib/service-categories";
 import {
@@ -251,6 +251,7 @@ export function RequestWizard({
                     }
                 }
                 if (hodEmail) {
+                    const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
                     sendHodJobDispatchEmailAction({
                         email: hodEmail,
                         hodName: routed.hod.hodName,
@@ -260,6 +261,7 @@ export function RequestWizard({
                         location: String(routed.docData.location || routed.matchedStateName),
                         description: description.trim(),
                         preferredTime,
+                        idToken,
                     }).catch(() => {});
                 }
             }

@@ -39,9 +39,7 @@ npm run dev
 * **Local Development Marketplace:** [http://localhost:3000](http://localhost:3000)
 * **Local Admin Control Center:** [http://localhost:3000/admin](http://localhost:3000/admin)
 
-#### 🔐 Official Admin Login Credentials:
-* **Email:** `admin@wheelhomes.com`
-* **Password:** `admin123456`
+> 🔐 **Admin Access:** Sign in with an administrator account provisioned in Firebase Authentication (with the `admin: true` custom claim or listed in the Firestore `admins` collection). Do not commit admin credentials to documentation.
 
 ---
 

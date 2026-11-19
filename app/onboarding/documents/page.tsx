@@ -107,7 +107,8 @@ export default function DocumentVerificationPage() {
             // Dispatch pending review confirmation email with actual name
             if (user.email) {
                 const applicantName = existingData.fullName || user.displayName || 'Service Provider';
-                sendPendingReviewEmailAction(user.email, applicantName)
+                const idToken = await user.getIdToken().catch(() => undefined);
+                sendPendingReviewEmailAction(user.email, applicantName, idToken)
                     .catch(err => console.warn('[Onboarding Docs] Notice: Pending review email dispatch:', err));
             }
 

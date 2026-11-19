@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { sendEmail } from '@/lib/mail';
 import { verificationCodeEmailTemplate, verificationCodeEmailText, getAppBaseUrl } from '@/lib/email-templates';
 import { adminDb } from '@/lib/firebase-admin';
-import { requireAuth, rateLimit, tooManyRequests } from '@/lib/api-auth';
+import { requireAuth, rateLimitDistributed, tooManyRequests } from '@/lib/api-auth';
 import { getDeterministicOtp } from '@/lib/otp';
 
 function formatNameFromEmail(email: string): string {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         if (caller instanceof NextResponse) return caller;
 
         // Rate limit: max 5 requests per 10 minutes per UID
-        if (!rateLimit(`send-verify:${caller.uid}`, 5, 10 * 60 * 1000)) {
+        if (!(await rateLimitDistributed(`send-verify:${caller.uid}`, 5, 10 * 60 * 1000))) {
             return tooManyRequests();
         }
 

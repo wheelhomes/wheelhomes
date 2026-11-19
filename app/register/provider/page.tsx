@@ -368,7 +368,8 @@ export default function RegisterProviderPage() {
             // 6. Dispatch pending review confirmation email to applicant
             const candidateEmail = currentUser.email || user?.email;
             if (candidateEmail) {
-                sendPendingReviewEmailAction(candidateEmail, user?.fullName || currentUser.displayName || 'Service Provider')
+                const idToken = await currentUser.getIdToken().catch(() => undefined);
+                sendPendingReviewEmailAction(candidateEmail, user?.fullName || currentUser.displayName || 'Service Provider', idToken)
                     .catch(err => console.warn('[Register Provider] Notice: Pending review email dispatch:', err));
             }
 

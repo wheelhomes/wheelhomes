@@ -245,7 +245,8 @@ export default function VerificationSettingsPage() {
                             if (confirm("Submit documents for review?")) {
                                 await updateDoc(doc(db, "users", user.uid), { status: 'pending_review' });
                                 if (user.email) {
-                                    sendPendingReviewEmailAction(user.email, user.displayName || user.fullName || 'Service Provider')
+                                    const idToken = await user.getIdToken().catch(() => undefined);
+                                    sendPendingReviewEmailAction(user.email, user.displayName || user.fullName || 'Service Provider', idToken)
                                         .catch(err => console.warn('[Verification] Notice: Pending review email dispatch:', err));
                                 }
                                 window.location.reload();

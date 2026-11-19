@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { requireAdmin, rateLimit, tooManyRequests } from '@/lib/api-auth';
+import { requireAdmin, rateLimitDistributed, tooManyRequests } from '@/lib/api-auth';
+import { logAdminAction } from '@/lib/admin-audit';
 
 interface ManageUserRequest {
     action: 'suspend' | 'reactivate' | 'delete';
@@ -14,15 +15,19 @@ export async function POST(req: Request) {
         const caller = await requireAdmin(req);
         if (caller instanceof NextResponse) return caller;
 
-        if (!rateLimit(`admin-user-action:${caller.uid}`, 30, 60 * 1000)) {
+        if (!(await rateLimitDistributed(`admin-user-action:${caller.uid}`, 30, 60 * 1000))) {
             return tooManyRequests();
         }
 
         const body = (await req.json()) as ManageUserRequest;
         const { action, targetUid, reason, force } = body;
 
-        if (!targetUid || typeof targetUid !== 'string') {
-            return NextResponse.json({ success: false, error: 'Target user ID is required' }, { status: 400 });
+        if (!['suspend', 'reactivate', 'delete'].includes(action)) {
+            return NextResponse.json({ success: false, error: 'Invalid action specified' }, { status: 400 });
+        }
+
+        if (!targetUid || typeof targetUid !== 'string' || targetUid.length > 128) {
+            return NextResponse.json({ success: false, error: 'Valid target user ID is required' }, { status: 400 });
         }
 
         if (caller.uid === targetUid) {
@@ -98,6 +103,15 @@ export async function POST(req: Request) {
                 console.warn('[Admin API] Could not add suspension notification:', notifErr);
             }
 
+            await logAdminAction({
+                actorUid: caller.uid,
+                actorEmail: caller.email,
+                action: 'user.suspend',
+                targetType: 'user',
+                targetId: targetUid,
+                details: { reason: cleanReason },
+            });
+
             return NextResponse.json({
                 success: true,
                 message: 'User account has been suspended and login access revoked.'
@@ -163,6 +177,14 @@ export async function POST(req: Request) {
             } catch (notifErr) {
                 console.warn('[Admin API] Could not send reactivation notification:', notifErr);
             }
+
+            await logAdminAction({
+                actorUid: caller.uid,
+                actorEmail: caller.email,
+                action: 'user.reactivate',
+                targetType: 'user',
+                targetId: targetUid,
+            });
 
             return NextResponse.json({
                 success: true,
@@ -270,6 +292,15 @@ export async function POST(req: Request) {
                     console.error('[Admin API] Error deleting from Firebase Auth:', authErr);
                 }
             }
+
+            await logAdminAction({
+                actorUid: caller.uid,
+                actorEmail: caller.email,
+                action: 'user.delete',
+                targetType: 'user',
+                targetId: targetUid,
+                details: { force: !!force, authDeleted },
+            });
 
             return NextResponse.json({
                 success: true,

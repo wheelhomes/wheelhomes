@@ -1,6 +1,8 @@
 'use server';
 
 import { sendEmail } from '@/lib/mail';
+import { adminAuth } from '@/lib/firebase-admin';
+import { isCallerAdmin, VerifiedCaller } from '@/lib/api-auth';
 import {
     welcomeEmailTemplate,
     welcomeEmailText,
@@ -16,13 +18,45 @@ import {
     hodJobDispatchEmailText,
 } from '@/lib/email-templates';
 
-export async function sendWelcomeEmailAction(email: string, name: string) {
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function verifyActionAuth(idToken?: string): Promise<VerifiedCaller | null> {
+    if (!idToken || typeof idToken !== 'string') return null;
+    try {
+        const decoded = await adminAuth().verifyIdToken(idToken);
+        return { uid: decoded.uid, email: decoded.email, token: decoded };
+    } catch {
+        return null;
+    }
+}
+
+async function verifyActionAdmin(idToken?: string): Promise<VerifiedCaller | null> {
+    const caller = await verifyActionAuth(idToken);
+    if (!caller) return null;
+    return (await isCallerAdmin(caller)) ? caller : null;
+}
+
+export async function sendWelcomeEmailAction(email: string, name: string, idToken?: string) {
+    const caller = await verifyActionAuth(idToken);
+    if (!caller) {
+        return { success: false, error: 'Unauthorized' };
+    }
     if (!email || !name) {
         return { success: false, error: 'Email and name are required' };
     }
+    if (caller.email && email.trim().toLowerCase() !== caller.email.toLowerCase() && !(await isCallerAdmin(caller))) {
+        return { success: false, error: 'Forbidden' };
+    }
 
     try {
-        const html = welcomeEmailTemplate(name);
+        const html = welcomeEmailTemplate(escapeHtml(name));
         const text = welcomeEmailText(name);
         const result = await sendEmail({
             to: email,
@@ -33,91 +67,90 @@ export async function sendWelcomeEmailAction(email: string, name: string) {
         return result;
     } catch (error) {
         console.error('Failed to send welcome email:', error);
-        return { success: false, error };
+        return { success: false, error: 'Failed to send email' };
     }
 }
 
-export async function sendRejectionEmailAction(email: string, name: string, reason: string) {
-    console.log(`[Rejection Email] Called with → email: "${email}", name: "${name}", reason: "${reason}"`);
+export async function sendRejectionEmailAction(email: string, name: string, reason: string, idToken?: string) {
+    const adminCaller = await verifyActionAdmin(idToken);
+    if (!adminCaller) {
+        return { success: false, error: 'Forbidden: Admin access required' };
+    }
 
     if (!email) {
-        console.error('[Rejection Email] ❌ No email provided — skipping.');
         return { success: false, error: 'Recipient email is required' };
     }
 
-    if (!reason || !reason.trim()) {
-        console.warn('[Rejection Email] ⚠️ Reason is empty — email will be sent but reason field will be blank.');
-    }
-
     try {
-        const html = rejectionEmailTemplate(name || 'Service Provider', reason);
+        const html = rejectionEmailTemplate(escapeHtml(name || 'Service Provider'), escapeHtml(reason || ''));
         const text = rejectionEmailText(name || 'Service Provider', reason);
-        console.log(`[Rejection Email] 📝 HTML & Text generated. Sending to ${email}...`);
         const result = await sendEmail({
             to: email,
             subject: 'Wheelhomes: Action Required on Your Verification Documents',
             html,
             text,
         });
-        console.log(`[Rejection Email] ✅ Send result:`, JSON.stringify(result));
         return result;
     } catch (error) {
-        console.error('[Rejection Email] ❌ Failed to send rejection email:', error);
-        return { success: false, error };
+        console.error('[Rejection Email] Failed to send rejection email:', error);
+        return { success: false, error: 'Failed to send email' };
     }
 }
 
-export async function sendApprovalEmailAction(email: string, name: string) {
-    console.log(`[Approval Email] Called with → email: "${email}", name: "${name}"`);
+export async function sendApprovalEmailAction(email: string, name: string, idToken?: string) {
+    const adminCaller = await verifyActionAdmin(idToken);
+    if (!adminCaller) {
+        return { success: false, error: 'Forbidden: Admin access required' };
+    }
 
     const cleanEmail = email ? email.trim() : '';
     if (!cleanEmail) {
-        console.error('[Approval Email] ❌ No recipient email provided — skipping email dispatch.');
         return { success: false, error: 'Recipient email is required' };
     }
 
     try {
-        const html = approvalEmailTemplate(name || 'Service Provider');
+        const html = approvalEmailTemplate(escapeHtml(name || 'Service Provider'));
         const text = approvalEmailText(name || 'Service Provider');
-        console.log(`[Approval Email] 📝 HTML & Text generated. Sending to ${cleanEmail}...`);
         const result = await sendEmail({
             to: cleanEmail,
             subject: 'Wheelhomes: Your Account Verification Has Been Approved',
             html,
             text,
         });
-        console.log(`[Approval Email] ✅ Result for ${cleanEmail}:`, JSON.stringify(result));
         return result;
     } catch (error) {
-        console.error('[Approval Email] ❌ Failed to send approval email:', error);
-        return { success: false, error };
+        console.error('[Approval Email] Failed to send approval email:', error);
+        return { success: false, error: 'Failed to send email' };
     }
 }
 
-export async function sendPendingReviewEmailAction(email: string, name: string) {
-    console.log(`[Pending Review Email] Called with → email: "${email}", name: "${name}"`);
+export async function sendPendingReviewEmailAction(email: string, name: string, idToken?: string) {
+    const caller = await verifyActionAuth(idToken);
+    if (!caller) {
+        return { success: false, error: 'Unauthorized' };
+    }
 
     const cleanEmail = email ? email.trim() : '';
     if (!cleanEmail) {
-        console.error('[Pending Review Email] ❌ No recipient email provided — skipping.');
         return { success: false, error: 'Recipient email is required' };
+    }
+    if (caller.email && cleanEmail.toLowerCase() !== caller.email.toLowerCase() && !(await isCallerAdmin(caller))) {
+        return { success: false, error: 'Forbidden' };
     }
 
     try {
-        const html = pendingReviewEmailTemplate(name || 'Service Provider');
+        const html = pendingReviewEmailTemplate(escapeHtml(name || 'Service Provider'));
         const text = pendingReviewEmailText(name || 'Service Provider');
-        console.log(`[Pending Review Email] 📝 Sending under review notification to ${cleanEmail}...`);
         const result = await sendEmail({
             to: cleanEmail,
             subject: 'Wheel of Comfort: Successful Onboarding — Your Account is Under Pending Review',
             html,
             text,
         });
-        console.log(`[Pending Review Email] ✅ Result for ${cleanEmail}:`, JSON.stringify(result));
         return result;
     } catch (error) {
-        console.error('[Pending Review Email] ❌ Failed to send pending review email:', error);
-        return { success: false, error };
+        console.error('[Pending Review Email] Failed to send pending review email:', error);
+        return { success: false, error: 'Failed to send email' };
     }
 }
 
@@ -126,18 +159,23 @@ export async function sendHodAppointmentEmailAction(params: {
     name: string;
     categoryName: string;
     stateName: string;
+    idToken?: string;
 }) {
+    const adminCaller = await verifyActionAdmin(params.idToken);
+    if (!adminCaller) {
+        return { success: false, error: 'Forbidden: Admin access required' };
+    }
+
     const cleanEmail = params.email ? params.email.trim() : '';
     if (!cleanEmail) {
-        console.warn('[HOD Appointment Email] ⚠️ No email provided — skipping.');
         return { success: false, error: 'Recipient email is required' };
     }
 
     try {
         const html = hodAppointmentEmailTemplate({
-            name: params.name || 'Service Partner',
-            categoryName: params.categoryName,
-            stateName: params.stateName,
+            name: escapeHtml(params.name || 'Service Partner'),
+            categoryName: escapeHtml(params.categoryName),
+            stateName: escapeHtml(params.stateName),
         });
         const text = hodAppointmentEmailText({
             name: params.name || 'Service Partner',
@@ -150,11 +188,10 @@ export async function sendHodAppointmentEmailAction(params: {
             html,
             text,
         });
-        console.log(`[HOD Appointment Email] ✅ Sent to ${cleanEmail}:`, JSON.stringify(result));
         return result;
     } catch (error) {
-        console.error('[HOD Appointment Email] ❌ Failed to send HOD appointment email:', error);
-        return { success: false, error };
+        console.error('[HOD Appointment Email] Failed to send HOD appointment email:', error);
+        return { success: false, error: 'Failed to send email' };
     }
 }
 
@@ -167,15 +204,29 @@ export async function sendHodJobDispatchEmailAction(params: {
     location: string;
     description: string;
     preferredTime?: string;
+    idToken?: string;
 }) {
+    const caller = await verifyActionAuth(params.idToken);
+    if (!caller) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
     const cleanEmail = params.email ? params.email.trim() : '';
     if (!cleanEmail) {
-        console.warn('[HOD Job Dispatch Email] ⚠️ No email provided — skipping.');
         return { success: false, error: 'Recipient email is required' };
     }
 
     try {
-        const html = hodJobDispatchEmailTemplate(params);
+        const html = hodJobDispatchEmailTemplate({
+            ...params,
+            hodName: escapeHtml(params.hodName),
+            categoryName: escapeHtml(params.categoryName),
+            stateName: escapeHtml(params.stateName),
+            clientName: escapeHtml(params.clientName),
+            location: escapeHtml(params.location),
+            description: escapeHtml(params.description),
+            preferredTime: params.preferredTime ? escapeHtml(params.preferredTime) : undefined,
+        });
         const text = hodJobDispatchEmailText(params);
         const result = await sendEmail({
             to: cleanEmail,
@@ -183,11 +234,10 @@ export async function sendHodJobDispatchEmailAction(params: {
             html,
             text,
         });
-        console.log(`[HOD Job Dispatch Email] ✅ Sent to ${cleanEmail}:`, JSON.stringify(result));
         return result;
     } catch (error) {
-        console.error('[HOD Job Dispatch Email] ❌ Failed to send HOD job dispatch email:', error);
-        return { success: false, error };
+        console.error('[HOD Job Dispatch Email] Failed to send HOD job dispatch email:', error);
+        return { success: false, error: 'Failed to send email' };
     }
 }
 

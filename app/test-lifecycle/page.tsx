@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { RequestServices, Request } from '@/lib/services/request-service';
 
 export default function TestLifecyclePage() {
+    if (process.env.NODE_ENV === 'production') {
+        return null;
+    }
     const [requestId, setRequestId] = useState<string | null>(null);
     const [requestData, setRequestData] = useState<Request | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
